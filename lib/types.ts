@@ -26,6 +26,13 @@ export type DocFields = {
 
 export type DocKey = "invoice" | "packing_list" | "bill_of_lading";
 
+/**
+ * Vercel Functions reject request bodies over 4.5 MB with a 413 before the
+ * handler runs, so the three PDFs must fit under that combined. Kept at 4 MB
+ * to leave room for multipart overhead.
+ */
+export const MAX_UPLOAD_TOTAL_BYTES = 4 * 1024 * 1024;
+
 export const DOC_KEYS: DocKey[] = ["invoice", "packing_list", "bill_of_lading"];
 
 export const DOC_NAMES: Record<DocKey, string> = {

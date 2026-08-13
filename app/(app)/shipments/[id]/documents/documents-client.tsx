@@ -25,6 +25,7 @@ import { Main } from "@/components/layout/main";
 import {
   DOC_KEYS,
   DOC_NAMES,
+  MAX_UPLOAD_TOTAL_BYTES,
   type CheckResult,
   type DocKey,
 } from "@/lib/types";
@@ -95,6 +96,19 @@ export function DocumentsClient({ shipmentId }: { shipmentId: string }) {
       return;
     }
 
+    const totalBytes = DOC_KEYS.reduce(
+      (sum, key) => sum + (files[key]?.size ?? 0),
+      0,
+    );
+    if (totalBytes > MAX_UPLOAD_TOTAL_BYTES) {
+      setError(
+        `The three PDFs total ${formatSize(totalBytes)}, over the ${formatSize(
+          MAX_UPLOAD_TOTAL_BYTES,
+        )} upload limit. Please use smaller or compressed PDFs.`,
+      );
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
@@ -105,9 +119,20 @@ export function DocumentsClient({ shipmentId }: { shipmentId: string }) {
         method: "POST",
         body: formData,
       });
-      const data = await response.json();
+
+      // Platform-level errors (e.g. a 413 from Vercel's edge) are not JSON,
+      // so fall back to a readable message instead of a JSON parse error.
+      const data = await response.json().catch(() => null);
       if (!response.ok) {
-        throw new Error(data.error ?? "The consistency check failed.");
+        throw new Error(
+          data?.error ??
+            (response.status === 413
+              ? "The uploaded PDFs are too large. Please use smaller files."
+              : `The consistency check failed (HTTP ${response.status}).`),
+        );
+      }
+      if (!data) {
+        throw new Error("The server returned an unreadable response.");
       }
 
       const result = data as CheckResult;

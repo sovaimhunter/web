@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
 import { compareDocuments } from "@/lib/compare";
 import { extractAll } from "@/lib/extract";
-import { DOC_KEYS, DOC_NAMES, type DocKey } from "@/lib/types";
+import {
+  DOC_KEYS,
+  DOC_NAMES,
+  MAX_UPLOAD_TOTAL_BYTES,
+  type DocKey,
+} from "@/lib/types";
 
 export const maxDuration = 120;
-
-const MAX_FILE_SIZE = 50 * 1024 * 1024; // OpenAI file input limit
 
 export async function POST(request: Request) {
   let formData: FormData;
@@ -42,12 +45,6 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
-    if (value.size > MAX_FILE_SIZE) {
-      return NextResponse.json(
-        { error: `${DOC_NAMES[key]} is larger than 50 MB.` },
-        { status: 400 },
-      );
-    }
     files[key] = value;
   }
 
@@ -55,6 +52,16 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: `Missing PDFs: ${missing.join(", ")}.` },
       { status: 400 },
+    );
+  }
+
+  // Backstop for local dev — on Vercel a body this large is rejected with a
+  // 413 before this handler is ever invoked.
+  const totalBytes = DOC_KEYS.reduce((sum, key) => sum + files[key]!.size, 0);
+  if (totalBytes > MAX_UPLOAD_TOTAL_BYTES) {
+    return NextResponse.json(
+      { error: "The three PDFs together exceed the 4 MB upload limit." },
+      { status: 413 },
     );
   }
 
