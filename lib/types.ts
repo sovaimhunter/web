@@ -20,6 +20,7 @@ export type DocFields = {
   net_weight_kg: number | null;
   gross_weight_kg: number | null;
   total_amount: number | null;
+  currency: string | null;
   line_items: LineItem[] | null;
 };
 

@@ -72,7 +72,7 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter>
-        <p className="px-4 py-2 text-xs text-muted-foreground">
+        <p className="truncate px-2 py-1 text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">
           Prototype · sample data only
         </p>
       </SidebarFooter>

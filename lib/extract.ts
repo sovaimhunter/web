@@ -20,6 +20,7 @@ const FIELDS = [
   "net_weight_kg",
   "gross_weight_kg",
   "total_amount",
+  "currency",
   "line_items",
 ] as const;
 
@@ -45,6 +46,7 @@ const DOC_FIELDS_SCHEMA = {
     net_weight_kg: nullableNumber,
     gross_weight_kg: nullableNumber,
     total_amount: nullableNumber,
+    currency: nullableString,
     line_items: {
       type: ["array", "null"],
       items: {
@@ -69,6 +71,7 @@ Numbers (weights, amounts, quantities) must be numeric — strip currency symbol
 "incoterms" is the full term as printed, e.g. "CIF Hamburg".
 "number_of_packages" is the raw string as printed, e.g. "3 wooden crates".
 "line_items" (invoices only) is an array of {"description","quantity","unit_price","amount"}, else null.
+"currency" is the currency code or name as printed, e.g. "AUD".
 No commentary — output only the structured JSON object.`;
 }
 

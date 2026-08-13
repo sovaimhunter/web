@@ -16,6 +16,14 @@ export function saveResult(
   resultCache.delete(shipmentId);
 }
 
+export function deleteResult(shipmentId: string): void {
+  if (typeof window === "undefined") return;
+  const key = RESULT_PREFIX + shipmentId;
+  localStorage.removeItem(key);
+  sessionStorage.removeItem(key);
+  resultCache.delete(shipmentId);
+}
+
 export function loadResult(shipmentId: string): CheckResult | null {
   if (typeof window === "undefined") return null;
   try {

@@ -2,7 +2,8 @@
 
 import { useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
-import { ArrowUpRight, FileCheck, PackagePlus, Search } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { PackagePlus, Pencil, Search, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,7 +13,17 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -23,10 +34,22 @@ import {
 } from "@/components/ui/table";
 import { Header } from "@/components/layout/header";
 import { Main } from "@/components/layout/main";
-import { listShipmentsCached, type Shipment } from "@/lib/shipments";
+import {
+  deleteShipment,
+  listShipmentsCached,
+  subscribeShipments,
+  updateShipment,
+  type Shipment,
+} from "@/lib/shipments";
 
-const emptySubscribe = () => () => {};
 const EMPTY_SHIPMENTS: Shipment[] = [];
+
+/** Checked shipments open on their results; anything else opens on documents. */
+function shipmentHref(shipment: Shipment): string {
+  return shipment.status === "checked"
+    ? `/shipments/${shipment.id}/results`
+    : `/shipments/${shipment.id}/documents`;
+}
 
 function StatusBadge({ shipment }: { shipment: Shipment }) {
   if (shipment.status === "checked") {
@@ -35,22 +58,30 @@ function StatusBadge({ shipment }: { shipment: Shipment }) {
     const hasMismatches = mismatches > 0;
     const hasReviews = reviews > 0 && !hasMismatches;
     return (
-      <Badge
-        variant={hasMismatches ? "destructive" : "secondary"}
-        className={
-          hasReviews
-            ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
-            : hasMismatches
-              ? ""
-              : "bg-muted text-muted-foreground"
-        }
+      <Link
+        href={`/shipments/${shipment.id}/results`}
+        aria-label={`View results for ${shipment.name}`}
+        title="View results"
+        className="rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+        onClick={(event) => event.stopPropagation()}
       >
-        {hasMismatches
-          ? `${mismatches} mismatch${mismatches === 1 ? "" : "es"}`
-          : hasReviews
-            ? `${reviews} require${reviews === 1 ? "s" : ""} review`
-            : "All matched"}
-      </Badge>
+        <Badge
+          variant={hasMismatches ? "destructive" : "secondary"}
+          className={
+            hasReviews
+              ? "bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-900/40 dark:text-amber-300 dark:hover:bg-amber-900/60"
+              : hasMismatches
+                ? "hover:bg-destructive/20"
+                : "bg-muted text-muted-foreground hover:bg-muted-foreground/20"
+          }
+        >
+          {hasMismatches
+            ? `${mismatches} mismatch${mismatches === 1 ? "" : "es"}`
+            : hasReviews
+              ? `${reviews} require${reviews === 1 ? "s" : ""} review`
+              : "All matched"}
+        </Badge>
+      </Link>
     );
   }
   if (shipment.status === "documents_ready") {
@@ -68,9 +99,36 @@ function formatDate(iso: string): string {
 }
 
 export default function ShipmentsPage() {
+  const router = useRouter();
   const [filter, setFilter] = useState("");
+  const [pendingDelete, setPendingDelete] = useState<Shipment | null>(null);
+  const [editing, setEditing] = useState<Shipment | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editReference, setEditReference] = useState("");
+  const [editError, setEditError] = useState<string | null>(null);
+
+  const openEditor = (shipment: Shipment) => {
+    setEditName(shipment.name);
+    setEditReference(shipment.reference);
+    setEditError(null);
+    setEditing(shipment);
+  };
+
+  const saveEditor = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!editing) return;
+    if (!editName.trim()) {
+      setEditError("Please give the shipment a name.");
+      return;
+    }
+    updateShipment(editing.id, {
+      name: editName.trim(),
+      reference: editReference.trim(),
+    });
+    setEditing(null);
+  };
   const shipments = useSyncExternalStore(
-    emptySubscribe,
+    subscribeShipments,
     listShipmentsCached,
     () => EMPTY_SHIPMENTS,
   );
@@ -148,11 +206,16 @@ export default function ShipmentsPage() {
                 </TableHeader>
                 <TableBody>
                   {filtered.map((shipment) => (
-                    <TableRow key={shipment.id}>
+                    <TableRow
+                      key={shipment.id}
+                      className="cursor-pointer"
+                      onClick={() => router.push(shipmentHref(shipment))}
+                    >
                       <TableCell className="font-medium">
                         <Link
-                          href={`/shipments/${shipment.id}/documents`}
+                          href={shipmentHref(shipment)}
                           className="hover:underline"
+                          onClick={(event) => event.stopPropagation()}
                         >
                           {shipment.name}
                         </Link>
@@ -167,30 +230,28 @@ export default function ShipmentsPage() {
                         <StatusBadge shipment={shipment} />
                       </TableCell>
                       <TableCell>
-                        <div className="flex justify-end gap-1">
-                          {shipment.status === "checked" && (
-                            <Button
-                              asChild
-                              variant="ghost"
-                              size="icon-sm"
-                              aria-label={`View results for ${shipment.name}`}
-                            >
-                              <Link href={`/shipments/${shipment.id}/results`}>
-                                <FileCheck />
-                              </Link>
-                            </Button>
-                          )}
+                        <div
+                          className="flex justify-end gap-1"
+                          onClick={(event) => event.stopPropagation()}
+                        >
                           <Button
-                            asChild
                             variant="ghost"
                             size="icon-sm"
-                            aria-label={`Open ${shipment.name}`}
+                            aria-label={`Edit ${shipment.name}`}
+                            title="Edit shipment"
+                            onClick={() => openEditor(shipment)}
                           >
-                            <Link
-                              href={`/shipments/${shipment.id}/documents`}
-                            >
-                              <ArrowUpRight />
-                            </Link>
+                            <Pencil />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={`Delete ${shipment.name}`}
+                            title="Delete shipment"
+                            className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                            onClick={() => setPendingDelete(shipment)}
+                          >
+                            <Trash2 />
                           </Button>
                         </div>
                       </TableCell>
@@ -202,6 +263,87 @@ export default function ShipmentsPage() {
           </div>
         )}
       </Main>
+
+      <Dialog
+        open={editing !== null}
+        onOpenChange={(open) => {
+          if (!open) setEditing(null);
+        }}
+      >
+        <DialogContent>
+          <form onSubmit={saveEditor} className="grid gap-4">
+            <DialogHeader>
+              <DialogTitle>Edit shipment</DialogTitle>
+              <DialogDescription>
+                Rename this shipment or change its reference.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">Shipment name *</Label>
+              <Input
+                id="edit-name"
+                value={editName}
+                onChange={(event) => {
+                  setEditName(event.target.value);
+                  setEditError(null);
+                }}
+                placeholder="e.g. Art shipment to Berlin — Aug 2026"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-reference">Reference (optional)</Label>
+              <Input
+                id="edit-reference"
+                value={editReference}
+                onChange={(event) => setEditReference(event.target.value)}
+                placeholder="e.g. OO-INV-2026-0142"
+              />
+            </div>
+            {editError && <p className="text-sm text-red-600">{editError}</p>}
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button type="button" variant="outline">
+                  Cancel
+                </Button>
+              </DialogClose>
+              <Button type="submit">Save changes</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={pendingDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingDelete(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete shipment?</DialogTitle>
+            <DialogDescription>
+              {pendingDelete
+                ? `“${pendingDelete.name}” and its check results will be permanently removed. This can’t be undone.`
+                : null}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Cancel</Button>
+            </DialogClose>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (pendingDelete) deleteShipment(pendingDelete.id);
+                setPendingDelete(null);
+              }}
+            >
+              <Trash2 />
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

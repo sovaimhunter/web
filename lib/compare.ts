@@ -10,7 +10,7 @@ import { DOC_KEYS, DOC_NAMES } from "./types";
 
 const LABELS: Record<string, string> = {
   exporter: "Exporter/Shipper",
-  consignee: "Consignee",
+  consignee: "Importer / Consignee",
   description_of_goods: "Description of goods",
   hs_code: "HS code",
   country_of_origin: "Country of origin",
@@ -22,7 +22,8 @@ const LABELS: Record<string, string> = {
   number_of_packages: "No. of packages",
   net_weight_kg: "Net weight (kg)",
   gross_weight_kg: "Gross weight (kg)",
-  total_amount: "Invoice total",
+  total_amount: "Invoice value",
+  currency: "Currency",
 };
 
 const FIELD_ORDER: (keyof DocFields)[] = [
@@ -31,15 +32,16 @@ const FIELD_ORDER: (keyof DocFields)[] = [
   "description_of_goods",
   "hs_code",
   "country_of_origin",
+  "unit_quantity",
+  "net_weight_kg",
+  "gross_weight_kg",
+  "currency",
+  "total_amount",
+  "number_of_packages",
   "incoterms",
   "port_of_loading",
   "port_of_discharge",
   "vessel",
-  "unit_quantity",
-  "number_of_packages",
-  "net_weight_kg",
-  "gross_weight_kg",
-  "total_amount",
 ];
 
 function isPresent(value: unknown): value is string | number {
@@ -190,7 +192,7 @@ export function compareDocuments(
       const looksLikeTypo = values.every((v) => similarity(base, v) >= 0.85);
       issues.push({
         severity: "error",
-        field: "Consignee",
+        field: "Importer / Consignee",
         message: `Consignee differs across documents${
           looksLikeTypo ? " (looks like a typo)" : ""
         }`,
@@ -259,7 +261,7 @@ export function compareDocuments(
     if (round2(sum) !== round2(invoice.total_amount)) {
       issues.push({
         severity: "error",
-        field: "Invoice total",
+        field: "Invoice value",
         message: "Line items do not sum to the stated total",
         detail: {
           "sum of lines": sum.toLocaleString("en-US"),
@@ -267,6 +269,22 @@ export function compareDocuments(
         },
       });
     }
+  }
+
+  // 5b. Currency (any documents that carry it).
+  const currencies = presentDocs(docs, "currency");
+  const currencyCodes = new Set(
+    Object.values(currencies).map((v) =>
+      normalize(v)?.toUpperCase() ?? String(v),
+    ),
+  );
+  if (currencyCodes.size > 1) {
+    issues.push({
+      severity: "error",
+      field: "Currency",
+      message: "Currency does not match",
+      detail: toDetail(currencies),
+    });
   }
 
   // 6. Painting support material (linen / canvas / paper...).

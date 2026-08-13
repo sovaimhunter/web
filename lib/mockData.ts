@@ -22,6 +22,7 @@ export const documents: Record<DocKey, DocFields> = {
     net_weight_kg: null,
     gross_weight_kg: null,
     total_amount: 24500,
+    currency: "AUD",
     line_items: [
       { description: "Desert Waterholes", quantity: 1, unit_price: 9500, amount: 9500 },
       { description: "Bush Tucker Dreaming", quantity: 1, unit_price: 7000, amount: 7000 },
@@ -43,6 +44,7 @@ export const documents: Record<DocKey, DocFields> = {
     net_weight_kg: 12,
     gross_weight_kg: 18.5,
     total_amount: null,
+    currency: null,
     line_items: null,
   },
   bill_of_lading: {
@@ -60,6 +62,7 @@ export const documents: Record<DocKey, DocFields> = {
     net_weight_kg: 12,
     gross_weight_kg: 18.0, // planted mismatch
     total_amount: null,
+    currency: null,
     line_items: null,
   },
 };

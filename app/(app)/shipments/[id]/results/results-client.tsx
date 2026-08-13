@@ -1,11 +1,14 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import {
   AlertCircle,
   ArrowLeft,
+  Check,
   CheckCircle2,
+  ChevronRight,
+  ChevronUp,
   FileText,
   RefreshCcw,
   XCircle,
@@ -37,16 +40,31 @@ import {
 import { DiffText } from "@/components/diff-text";
 import { Header } from "@/components/layout/header";
 import { Main } from "@/components/layout/main";
-import { DOC_KEYS, DOC_NAMES, type FieldRow, type FieldStatus } from "@/lib/types";
+import {
+  DOC_KEYS,
+  DOC_NAMES,
+  type FieldRow,
+  type FieldStatus,
+} from "@/lib/types";
 import { loadResult } from "@/lib/results";
 
 const emptySubscribe = () => () => {};
 
 const getServerSnapshot = () => null;
 
+const STATUS_PRIORITY: Record<FieldStatus, number> = {
+  mismatch: 0,
+  review: 1,
+  match: 2,
+};
+
 function formatValue(value: string | number | null): string {
   if (value === null || value === undefined || value === "") return "—";
   return String(value);
+}
+
+function isPresent(value: string | number | null): value is string | number {
+  return value !== null && value !== undefined && value !== "";
 }
 
 function DocChip({ label, filename }: { label: string; filename?: string }) {
@@ -71,6 +89,7 @@ export function ResultsClient({ shipmentId }: { shipmentId: string }) {
     () => loadResult(shipmentId),
     getServerSnapshot,
   );
+  const [showMatched, setShowMatched] = useState(false);
 
   if (!result) {
     return (
@@ -116,11 +135,17 @@ export function ResultsClient({ shipmentId }: { shipmentId: string }) {
     (row) => statusOf(row) === "mismatch",
   ).length;
   const issueMessageByField = new Map(
-    result.issues.map((issue) => [
-      issue.field,
-      `${issue.severity === "error" ? "🔴" : "🟠"} ${issue.message}`,
-    ]),
+    result.issues.map((issue) => [issue.field, issue.message]),
   );
+
+  // Rows sorted so problems surface first; original field order is kept
+  // within each status group (Array#sort is stable).
+  const sortedRows = [...result.rows].sort(
+    (a, b) => STATUS_PRIORITY[statusOf(a)] - STATUS_PRIORITY[statusOf(b)],
+  );
+  const visibleRows = showMatched
+    ? sortedRows
+    : sortedRows.filter((row) => statusOf(row) !== "match");
 
   const statusTitle = noFields
     ? "No fields extracted"
@@ -174,11 +199,11 @@ export function ResultsClient({ shipmentId }: { shipmentId: string }) {
         <section
           className={`mb-8 rounded-xl border bg-card p-5 shadow-sm ${
             noFields
-              ? "border-amber-300"
+              ? "border-amber-200"
               : mismatchCount > 0
-                ? "border-red-200"
+                ? "border-red-100 dark:border-red-900/40"
                 : reviewCount > 0
-                  ? "border-amber-300"
+                  ? "border-amber-200 dark:border-amber-900/40"
                   : "border-border"
           }`}
         >
@@ -187,11 +212,11 @@ export function ResultsClient({ shipmentId }: { shipmentId: string }) {
               <span
                 className={`flex size-11 shrink-0 items-center justify-center rounded-full ${
                   noFields
-                    ? "bg-amber-100 text-amber-600 dark:bg-amber-950"
+                    ? "bg-amber-50 text-amber-500 dark:bg-amber-950"
                     : mismatchCount > 0
-                      ? "bg-red-100 text-red-600 dark:bg-red-950"
+                      ? "bg-red-50 text-red-500 dark:bg-red-950"
                       : reviewCount > 0
-                        ? "bg-amber-100 text-amber-600 dark:bg-amber-950"
+                        ? "bg-amber-50 text-amber-500 dark:bg-amber-950"
                         : "bg-muted text-muted-foreground"
                 }`}
               >
@@ -221,13 +246,13 @@ export function ResultsClient({ shipmentId }: { shipmentId: string }) {
                 </Badge>
               )}
               {reviewCount > 0 && (
-                <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
-                  🟡 {reviewCount} require{reviewCount === 1 ? "s" : ""} review
+                <Badge className="bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-300">
+                  {reviewCount} require{reviewCount === 1 ? "s" : ""} review
                 </Badge>
               )}
               {mismatchCount > 0 && (
-                <Badge variant="destructive">
-                  🔴 {mismatchCount} mismatch{mismatchCount === 1 ? "" : "es"}
+                <Badge className="bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-300">
+                  {mismatchCount} mismatch{mismatchCount === 1 ? "" : "es"}
                 </Badge>
               )}
             </div>
@@ -248,9 +273,9 @@ export function ResultsClient({ shipmentId }: { shipmentId: string }) {
         {noFields ? (
           <Alert
             variant="destructive"
-            className="mb-8 border-amber-300 bg-amber-50/60 dark:bg-amber-950/20"
+            className="mb-8 border-amber-200 bg-amber-50/50 dark:bg-amber-950/20"
           >
-            <AlertCircle className="text-amber-600" />
+            <AlertCircle className="text-amber-500" />
             <AlertTitle>Check the uploaded files</AlertTitle>
             <AlertDescription>
               Make sure you upload the filled PDFs from{" "}
@@ -268,147 +293,227 @@ export function ResultsClient({ shipmentId }: { shipmentId: string }) {
           </Alert>
         ) : null}
 
-        <section>
-          <h2 className="mb-3 text-base font-semibold">
-            Field-by-field comparison
-          </h2>
-          <TooltipProvider>
-            <div className="overflow-hidden rounded-xl border bg-card">
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/50 hover:bg-muted/50">
-                      <TableHead className="w-56">Field</TableHead>
-                      {DOC_KEYS.map((key) => (
-                        <TableHead key={key} className="min-w-52">
-                          <span className="block font-semibold">
-                            {DOC_NAMES[key]}
-                          </span>
-                          {result.files?.[key] && (
-                            <span className="mt-0.5 block max-w-52 truncate text-xs font-normal text-muted-foreground">
-                              {result.files[key]}
+        {!noFields && (
+          <section>
+            <h2 className="mb-3 text-base font-semibold">
+              Field-by-field comparison
+            </h2>
+            <TooltipProvider>
+              <div className="overflow-hidden rounded-xl border bg-card">
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/50 hover:bg-muted/50">
+                        <TableHead className="w-56">Field</TableHead>
+                        {DOC_KEYS.map((key) => (
+                          <TableHead key={key} className="min-w-52">
+                            <span className="block font-semibold">
+                              {DOC_NAMES[key]}
                             </span>
-                          )}
-                        </TableHead>
-                      ))}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {result.rows.map((row) => {
-                      const status = statusOf(row);
-                      return (
-                        <TableRow
-                          key={row.key}
-                          className={
-                            status === "mismatch"
-                              ? "bg-red-50/40 dark:bg-red-950/10"
-                              : status === "review"
-                                ? "bg-amber-50/50 dark:bg-amber-950/10"
-                                : ""
-                          }
-                        >
-                          <TableCell className="whitespace-nowrap align-top font-medium">
-                            <span className="flex items-center gap-1.5">
-                              {status === "mismatch" ? (
-                                <XCircle className="size-4 shrink-0 text-red-600" />
-                              ) : status === "review" ? (
-                                <AlertCircle className="size-4 shrink-0 text-amber-500" />
-                              ) : (
-                                <CheckCircle2 className="size-4 shrink-0 text-muted-foreground" />
-                              )}
-                              {row.field}
-                              <span
-                                className={`text-xs font-semibold ${
-                                  status === "mismatch"
-                                    ? "text-red-600"
-                                    : status === "review"
-                                      ? "text-amber-600"
-                                      : "text-muted-foreground"
-                                }`}
-                              >
-                                {status === "mismatch"
-                                  ? "mismatch"
-                                  : status === "review"
-                                    ? "review"
-                                    : "match"}
+                            {result.files?.[key] && (
+                              <span className="mt-0.5 block max-w-52 truncate text-xs font-normal text-muted-foreground">
+                                {result.files[key]}
                               </span>
+                            )}
+                          </TableHead>
+                        ))}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {visibleRows.map((row) => {
+                        const status = statusOf(row);
+                        const presentKeys = DOC_KEYS.filter((key) =>
+                          isPresent(row.vals[key]),
+                        );
+                        // No majority: every document that has this field is
+                        // flagged as an outlier, so there's no "correct" side —
+                        // just disagreement to resolve, not a confirmed error.
+                        const isTie =
+                          status !== "match" &&
+                          presentKeys.length > 1 &&
+                          row.outliers.length === presentKeys.length;
+
+                        return (
+                          <TableRow
+                            key={row.key}
+                            className={
+                              status === "mismatch"
+                                ? "bg-red-50/25 dark:bg-red-950/10"
+                                : status === "review"
+                                  ? "bg-amber-50/30 dark:bg-amber-950/10"
+                                  : ""
+                            }
+                          >
+                            <TableCell className="whitespace-nowrap align-top font-medium">
+                              <span className="flex items-center gap-1.5">
+                                {status === "mismatch" ? (
+                                  <XCircle className="size-4 shrink-0 text-red-500" />
+                                ) : status === "review" ? (
+                                  <AlertCircle className="size-4 shrink-0 text-amber-500" />
+                                ) : (
+                                  <CheckCircle2 className="size-4 shrink-0 text-muted-foreground" />
+                                )}
+                                {row.field}
+                                <span
+                                  className={`text-xs font-semibold ${
+                                    status === "mismatch"
+                                      ? "text-red-500"
+                                      : status === "review"
+                                        ? "text-amber-500"
+                                        : "text-muted-foreground"
+                                  }`}
+                                >
+                                  {status === "mismatch"
+                                    ? "mismatch"
+                                    : status === "review"
+                                      ? "review"
+                                      : "match"}
+                                </span>
+                              </span>
+                            </TableCell>
+                            {DOC_KEYS.map((key) => {
+                              const value = row.vals[key];
+                              const present = isPresent(value);
+                              const isOutlier =
+                                present && row.outliers?.includes(key);
+                              const tone =
+                                status === "review" ? "amber" : "red";
+                              const toneText =
+                                tone === "amber"
+                                  ? "text-amber-600 dark:text-amber-400"
+                                  : "text-red-600 dark:text-red-400";
+                              const toneBg =
+                                tone === "amber"
+                                  ? "bg-amber-50 dark:bg-amber-950/20"
+                                  : "bg-red-50 dark:bg-red-950/20";
+                              const canDiff =
+                                !isTie &&
+                                typeof value === "string" &&
+                                typeof row.reference === "string";
+
+                              let cellContent: React.ReactNode = formatValue(
+                                value,
+                              );
+                              if (status !== "match" && present) {
+                                if (isTie) {
+                                  // No consensus: highlight both sides the
+                                  // same way, no check mark, no bold "winner".
+                                  cellContent = (
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <span
+                                          tabIndex={0}
+                                          className={`rounded-sm px-1 py-0.5 outline-none ${toneBg} ${toneText} focus-visible:ring-2 focus-visible:ring-ring/60`}
+                                        >
+                                          {formatValue(value)}
+                                        </span>
+                                      </TooltipTrigger>
+                                      <TooltipContent
+                                        side="top"
+                                        className="max-w-xs"
+                                      >
+                                        Only {presentKeys.length} of 3
+                                        documents have this field — can&apos;t
+                                        tell which value is correct.
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  );
+                                } else if (isOutlier) {
+                                  // Background pill is the baseline "this one
+                                  // is flagged" signal — always shown, even
+                                  // when DiffText finds no char-level diff
+                                  // (e.g. the outlier is just missing a
+                                  // trailing part of the reference value).
+                                  cellContent = (
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <span
+                                          tabIndex={0}
+                                          className={`rounded-sm px-1 py-0.5 outline-none ${toneBg} focus-visible:ring-2 focus-visible:ring-ring/60`}
+                                        >
+                                          {canDiff ? (
+                                            <DiffText
+                                              value={value}
+                                              reference={row.reference as string}
+                                              tone={tone}
+                                            />
+                                          ) : (
+                                            <span
+                                              className={`font-semibold ${toneText}`}
+                                            >
+                                              {formatValue(value)}
+                                            </span>
+                                          )}
+                                        </span>
+                                      </TooltipTrigger>
+                                      <TooltipContent
+                                        side="top"
+                                        className="max-w-xs"
+                                      >
+                                        {issueMessageByField.get(row.field) ??
+                                          "Value does not match the other documents."}
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  );
+                                } else {
+                                  // Agrees with the majority.
+                                  cellContent = (
+                                    <span className="inline-flex items-center gap-1 text-muted-foreground">
+                                      <Check className="size-3 shrink-0 text-muted-foreground/70" />
+                                      {formatValue(value)}
+                                    </span>
+                                  );
+                                }
+                              }
+
+                              return (
+                                <TableCell
+                                  key={key}
+                                  className={`min-w-48 max-w-96 align-top ${
+                                    present ? "" : "text-muted-foreground/50"
+                                  }`}
+                                  style={{
+                                    whiteSpace: "normal",
+                                    overflowWrap: "anywhere",
+                                  }}
+                                >
+                                  {cellContent}
+                                </TableCell>
+                              );
+                            })}
+                          </TableRow>
+                        );
+                      })}
+                      {matchCount > 0 && (
+                        <TableRow
+                          className="cursor-pointer hover:bg-muted/40"
+                          onClick={() => setShowMatched((v) => !v)}
+                        >
+                          <TableCell
+                            colSpan={DOC_KEYS.length + 1}
+                            className="text-sm text-muted-foreground"
+                          >
+                            <span className="inline-flex items-center gap-1.5">
+                              {showMatched ? (
+                                <ChevronUp className="size-4 shrink-0" />
+                              ) : (
+                                <ChevronRight className="size-4 shrink-0" />
+                              )}
+                              <Check className="size-3.5 shrink-0 text-muted-foreground/70" />
+                              {matchCount} field{matchCount === 1 ? "" : "s"}{" "}
+                              matched
+                              {!showMatched && " — click to show"}
                             </span>
                           </TableCell>
-                          {DOC_KEYS.map((key) => {
-                            const value = row.vals[key];
-                            const present = value !== null && value !== "";
-                            const highlight =
-                              status !== "match" &&
-                              present &&
-                              row.outliers?.includes(key);
-                            const canDiff =
-                              highlight &&
-                              typeof value === "string" &&
-                              typeof row.reference === "string";
-                            return (
-                              <TableCell
-                                key={key}
-                                className={`min-w-48 max-w-96 align-top ${
-                                  present ? "" : "text-muted-foreground/50"
-                                }`}
-                                style={{
-                                  whiteSpace: "normal",
-                                  overflowWrap: "anywhere",
-                                }}
-                              >
-                                {highlight ? (
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <span
-                                        tabIndex={0}
-                                        className="rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
-                                      >
-                                        {canDiff ? (
-                                          <DiffText
-                                            value={value}
-                                            reference={row.reference as string}
-                                            tone={
-                                              status === "review"
-                                                ? "amber"
-                                                : "red"
-                                            }
-                                          />
-                                        ) : (
-                                          <span
-                                            className={`font-semibold ${
-                                              status === "review"
-                                                ? "text-amber-600 dark:text-amber-400"
-                                                : "text-red-600 dark:text-red-400"
-                                            }`}
-                                          >
-                                            {formatValue(value)}
-                                          </span>
-                                        )}
-                                      </span>
-                                    </TooltipTrigger>
-                                    <TooltipContent
-                                      side="top"
-                                      className="max-w-xs"
-                                    >
-                                      {issueMessageByField.get(row.field) ??
-                                        "Value does not match the other documents."}
-                                    </TooltipContent>
-                                  </Tooltip>
-                                ) : (
-                                  formatValue(value)
-                                )}
-                              </TableCell>
-                            );
-                          })}
                         </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
               </div>
-            </div>
-          </TooltipProvider>
-        </section>
+            </TooltipProvider>
+          </section>
+        )}
       </Main>
     </>
   );

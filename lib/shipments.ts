@@ -1,3 +1,5 @@
+import { deleteResult } from "./results";
+
 export type ShipmentStatus = "draft" | "documents_ready" | "checked";
 
 export type Shipment = {
@@ -26,11 +28,22 @@ function readAll(): Shipment[] {
   }
 }
 
+const listeners = new Set<() => void>();
+
+/** Subscribe to shipment changes made in this tab (for useSyncExternalStore). */
+export function subscribeShipments(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
 function writeAll(shipments: Shipment[]): void {
   if (typeof window === "undefined") return;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(shipments));
   shipmentCache.clear();
   listCache = undefined;
+  for (const listener of listeners) listener();
 }
 
 export function listShipments(): Shipment[] {
@@ -100,4 +113,13 @@ export function updateShipment(
   all[index] = { ...all[index], ...patch };
   writeAll(all);
   return all[index];
+}
+
+/** Removes the shipment and any check result stored for it. */
+export function deleteShipment(id: string): void {
+  const all = readAll();
+  const next = all.filter((shipment) => shipment.id !== id);
+  if (next.length === all.length) return;
+  deleteResult(id);
+  writeAll(next);
 }
