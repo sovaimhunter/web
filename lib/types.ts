@@ -35,6 +35,8 @@ export const DOC_NAMES: Record<DocKey, string> = {
 
 export type Severity = "error" | "warning";
 
+export type FieldStatus = "match" | "review" | "mismatch";
+
 export type Issue = {
   severity: Severity;
   field: string;
@@ -47,6 +49,7 @@ export type FieldRow = {
   key: string;
   vals: Record<DocKey, string | number | null>;
   consistent: boolean;
+  status: FieldStatus;
   outliers: DocKey[];
   reference: string | number | null;
 };

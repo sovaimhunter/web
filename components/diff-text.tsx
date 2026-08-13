@@ -4,9 +4,11 @@ import { diffChars } from "@/lib/diff";
 export function DiffText({
   value,
   reference,
+  tone = "red",
 }: {
   value: string;
   reference: string;
+  tone?: "red" | "amber";
 }) {
   const segments = useMemo(
     () => diffChars(value, reference),
@@ -22,7 +24,11 @@ export function DiffText({
         segment.changed ? (
           <span
             key={index}
-            className="font-semibold text-red-600 dark:text-red-400"
+            className={`font-semibold ${
+              tone === "amber"
+                ? "text-amber-600 dark:text-amber-400"
+                : "text-red-600 dark:text-red-400"
+            }`}
           >
             {segment.text}
           </span>

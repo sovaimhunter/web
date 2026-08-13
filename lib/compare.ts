@@ -2,6 +2,7 @@ import type {
   ComparisonResult,
   DocFields,
   DocKey,
+  FieldStatus,
   FieldRow,
   Issue,
 } from "./types";
@@ -294,7 +295,6 @@ export function compareDocuments(
   }
 
   // Field-by-field consistency table.
-  const flagged = new Set(issues.map((i) => i.field));
   const rows: FieldRow[] = [];
   for (const field of FIELD_ORDER) {
     const vals = Object.fromEntries(
@@ -321,7 +321,15 @@ export function compareDocuments(
     }
 
     const label = LABELS[field] ?? field;
-    if (flagged.has(label)) consistent = false;
+    const issue = issues.find((i) => i.field === label);
+    if (issue) consistent = false;
+    const status: FieldStatus = issue
+      ? issue.severity === "error"
+        ? "mismatch"
+        : "review"
+      : consistent
+        ? "match"
+        : "review";
 
     const presentEntries = DOC_KEYS.map((key) => ({
       key,
@@ -338,6 +346,7 @@ export function compareDocuments(
       key: field,
       vals,
       consistent,
+      status,
       outliers,
       reference,
     });
