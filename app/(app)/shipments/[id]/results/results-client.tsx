@@ -43,6 +43,7 @@ import { Main } from "@/components/layout/main";
 import {
   DOC_KEYS,
   DOC_NAMES,
+  type DocKey,
   type FieldRow,
   type FieldStatus,
 } from "@/lib/types";
@@ -58,9 +59,137 @@ const STATUS_PRIORITY: Record<FieldStatus, number> = {
   match: 2,
 };
 
+const DISPLAY_LABELS: Record<string, string> = {
+  exporter: "Exporter details",
+  consignee: "Importer / consignee details",
+  description_of_goods: "Product description",
+  hs_code: "HS code",
+  country_of_origin: "Country of origin",
+  incoterms: "Incoterms",
+  port_of_loading: "Port of loading",
+  port_of_discharge: "Port of discharge",
+  vessel: "Vessel",
+  unit_quantity: "Quantity",
+  number_of_packages: "Package count",
+  net_weight_kg: "Net weight",
+  gross_weight_kg: "Gross weight",
+  total_amount: "Invoice value",
+  currency: "Currency",
+};
+
+type FieldGuidance = {
+  why: string;
+  check: string;
+};
+
+const DEFAULT_GUIDANCE: FieldGuidance = {
+  why: "Different details across export documents can delay checks by customs, banks, or carriers.",
+  check:
+    "Confirm the correct value against your shipment records, then update the document that is incorrect.",
+};
+
+const FIELD_GUIDANCE: Record<string, FieldGuidance> = {
+  exporter: {
+    why: "Different exporter details can make the documents appear to refer to different legal entities.",
+    check:
+      "Confirm the exporter's legal name and address, including company suffixes, on every document.",
+  },
+  consignee: {
+    why: "The consignee identifies who will receive the goods and may be used for customs clearance and delivery.",
+    check:
+      "Confirm the importer's legal name and address with the buyer, then correct the document that differs.",
+  },
+  description_of_goods: {
+    why: "The goods description supports customs classification and helps carriers understand what is being shipped.",
+    check:
+      "Check that the product type, material, model, and quantity describe the same goods on all documents.",
+  },
+  hs_code: {
+    why: "An inconsistent HS code can affect customs declarations, duty treatment, and import requirements.",
+    check:
+      "Confirm the intended HS code with your customs broker or classification source before updating the documents.",
+  },
+  country_of_origin: {
+    why: "Country of origin can affect duties, trade preferences, and documentary requirements.",
+    check:
+      "Confirm where the goods were produced and use the same country of origin on all relevant documents.",
+  },
+  incoterms: {
+    why: "Incoterms define who is responsible for transport costs, insurance, and risk during the shipment.",
+    check:
+      "Confirm the agreed Incoterm and named place in the sales contract or purchase order.",
+  },
+  port_of_loading: {
+    why: "The port of loading should reflect the shipment's actual route and carrier booking.",
+    check:
+      "Compare the documents with the freight booking and confirm where the goods will be loaded.",
+  },
+  port_of_discharge: {
+    why: "A different discharge port can cause routing, clearance, or delivery problems.",
+    check:
+      "Compare the documents with the freight booking and confirm the destination port with the consignee.",
+  },
+  vessel: {
+    why: "Different vessel details may mean a document was prepared from an older or incorrect booking.",
+    check:
+      "Confirm the current vessel or voyage details against the carrier's latest booking confirmation.",
+  },
+  unit_quantity: {
+    why: "Customs, the buyer, and the carrier need a consistent account of how many goods are being shipped.",
+    check:
+      "Confirm the shipped quantity and unit of measure, then correct the document that differs.",
+  },
+  number_of_packages: {
+    why: "The package count should match the physical consignment accepted by the carrier.",
+    check:
+      "Count the cartons, crates, or pallets and compare the result with the packing and transport records.",
+  },
+  net_weight_kg: {
+    why: "Net weight is used to describe the goods without packaging and may be required for customs reporting.",
+    check:
+      "Confirm the net weight and unit of measure from the final packing records.",
+  },
+  gross_weight_kg: {
+    why: "Gross weight affects freight handling and should represent the goods together with their packaging.",
+    check:
+      "Confirm the final packed weight and unit of measure, then update the incorrect document.",
+  },
+  total_amount: {
+    why: "The invoice value may be used for customs valuation, payment, insurance, and financial records.",
+    check:
+      "Recalculate the invoice lines and confirm the agreed sale value before correcting the total.",
+  },
+  currency: {
+    why: "A different currency changes the meaning of the invoice value and can affect payment and customs valuation.",
+    check:
+      "Confirm the agreed transaction currency in the contract or purchase order and update the incorrect document.",
+  },
+};
+
 function formatValue(value: string | number | null): string {
   if (value === null || value === undefined || value === "") return "—";
   return String(value);
+}
+
+function formatIssueValue(
+  row: FieldRow,
+  key: DocKey,
+  currency?: string | null,
+): string {
+  const value = row.vals[key];
+  if (!isPresent(value)) return "—";
+  if (typeof value !== "number") return value;
+
+  const formatted = value.toLocaleString("en-US", {
+    maximumFractionDigits: 2,
+  });
+  if (row.key === "gross_weight_kg" || row.key === "net_weight_kg") {
+    return `${formatted} kg`;
+  }
+  if (row.key === "total_amount" && currency) {
+    return `${currency.toUpperCase()} ${formatted}`;
+  }
+  return formatted;
 }
 
 function isPresent(value: string | number | null): value is string | number {
@@ -134,6 +263,7 @@ export function ResultsClient({ shipmentId }: { shipmentId: string }) {
   const mismatchCount = result.rows.filter(
     (row) => statusOf(row) === "mismatch",
   ).length;
+  const problemCount = mismatchCount + reviewCount;
   const issueMessageByField = new Map(
     result.issues.map((issue) => [issue.field, issue.message]),
   );
@@ -146,25 +276,32 @@ export function ResultsClient({ shipmentId }: { shipmentId: string }) {
   const visibleRows = showMatched
     ? sortedRows
     : sortedRows.filter((row) => statusOf(row) !== "match");
+  const problemRows = sortedRows.filter(
+    (row) => statusOf(row) !== "match",
+  );
+  const matchedRows = sortedRows.filter((row) => statusOf(row) === "match");
+
+  const problemBreakdown = [
+    mismatchCount > 0
+      ? `${mismatchCount} must be corrected`
+      : null,
+    reviewCount > 0
+      ? `${reviewCount} ${reviewCount === 1 ? "requires" : "require"} review`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   const statusTitle = noFields
     ? "No fields extracted"
-    : mismatchCount > 0
-      ? `${mismatchCount} mismatch${mismatchCount === 1 ? "" : "es"}${
-          reviewCount > 0
-            ? ` · ${reviewCount} review${reviewCount === 1 ? "" : "s"}`
-            : ""
-        }`
-      : reviewCount > 0
-        ? `${reviewCount} require${reviewCount === 1 ? "s" : ""} review`
+    : problemCount > 0
+      ? `${problemCount} issue${problemCount === 1 ? "" : "s"} detected`
         : "All matched";
 
   const statusDescription = noFields
     ? "These documents look like blank templates — no values were found to compare."
-    : mismatchCount > 0
-      ? "Fields differ and need correction before shipment."
-      : reviewCount > 0
-        ? "Fields are close but should be reviewed before shipping."
+    : problemCount > 0
+      ? problemBreakdown
         : "All fields that are present on the documents match.";
 
   return (
@@ -294,10 +431,169 @@ export function ResultsClient({ shipmentId }: { shipmentId: string }) {
         ) : null}
 
         {!noFields && (
-          <section>
-            <h2 className="mb-3 text-base font-semibold">
-              Field-by-field comparison
-            </h2>
+          <>
+            {problemRows.length > 0 && (
+              <section aria-labelledby="issues-heading" className="mb-8">
+                <div className="mb-3">
+                  <h2 id="issues-heading" className="text-lg font-semibold">
+                    Issues to address
+                  </h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Review these items before the shipment proceeds.
+                  </p>
+                </div>
+                <div className="space-y-4">
+                  {problemRows.map((row) => {
+                    const status = statusOf(row);
+                    const guidance = FIELD_GUIDANCE[row.key] ?? DEFAULT_GUIDANCE;
+                    const displayLabel = DISPLAY_LABELS[row.key] ?? row.field;
+                    const presentKeys = DOC_KEYS.filter((key) =>
+                      isPresent(row.vals[key]),
+                    );
+                    const isTie =
+                      presentKeys.length > 1 &&
+                      row.outliers.length === presentKeys.length;
+                    const isMismatch = status === "mismatch";
+
+                    return (
+                      <article
+                        key={row.key}
+                        className={`overflow-hidden rounded-xl border bg-card shadow-sm ${
+                          isMismatch
+                            ? "border-red-200 dark:border-red-900/60"
+                            : "border-amber-200 dark:border-amber-900/60"
+                        }`}
+                      >
+                        <div className="flex flex-col gap-3 border-b bg-muted/20 px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="flex items-start gap-3">
+                            <span
+                              className={`mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full ${
+                                isMismatch
+                                  ? "bg-red-50 text-red-600 dark:bg-red-950"
+                                  : "bg-amber-50 text-amber-600 dark:bg-amber-950"
+                              }`}
+                            >
+                              {isMismatch ? (
+                                <XCircle className="size-4" />
+                              ) : (
+                                <AlertCircle className="size-4" />
+                              )}
+                            </span>
+                            <div>
+                              <h3 className="font-semibold">
+                                {displayLabel}{" "}
+                                {isMismatch ? "mismatch" : "requires review"}
+                              </h3>
+                              {issueMessageByField.get(row.field) && (
+                                <p className="mt-0.5 text-sm text-muted-foreground">
+                                  {issueMessageByField.get(row.field)}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          <Badge
+                            className={
+                              isMismatch
+                                ? "w-fit bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300"
+                                : "w-fit bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
+                            }
+                          >
+                            {isMismatch ? "Must fix" : "Review"}
+                          </Badge>
+                        </div>
+
+                        <div className="p-5">
+                          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                            {presentKeys.map((key) => (
+                              <div
+                                key={key}
+                                className="rounded-lg border bg-muted/20 px-3.5 py-3"
+                              >
+                                <p className="text-xs font-medium text-muted-foreground">
+                                  {DOC_NAMES[key]}
+                                </p>
+                                <p className="mt-1 break-words text-sm font-medium">
+                                  {formatIssueValue(
+                                    row,
+                                    key,
+                                    result.documents[key].currency,
+                                  )}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+
+                          {isTie && (
+                            <p className="mt-3 text-sm text-muted-foreground">
+                              TradeLynk cannot determine which value is correct
+                              from these documents alone.
+                            </p>
+                          )}
+
+                          <div className="mt-5 grid gap-4 border-t pt-4 md:grid-cols-2">
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                Why this matters
+                              </p>
+                              <p className="mt-1.5 text-sm leading-6">
+                                {guidance.why}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                What to check
+                              </p>
+                              <p className="mt-1.5 text-sm leading-6">
+                                {guidance.check}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
+
+            {matchedRows.length > 0 && (
+              <section aria-labelledby="matched-heading" className="mb-8">
+                <div className="mb-3">
+                  <h2 id="matched-heading" className="text-lg font-semibold">
+                    Matched checks
+                  </h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    These details were consistent wherever they appeared.
+                  </p>
+                </div>
+                <div className="grid gap-2 rounded-xl border bg-card p-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {matchedRows.map((row) => (
+                    <div
+                      key={row.key}
+                      className="flex items-center gap-2 rounded-lg bg-muted/30 px-3 py-2.5 text-sm"
+                    >
+                      <CheckCircle2 className="size-4 shrink-0 text-green-600" />
+                      <span>
+                        {DISPLAY_LABELS[row.key] ?? row.field} matched
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            <section aria-labelledby="comparison-heading">
+              <div className="mb-3">
+                <h2
+                  id="comparison-heading"
+                  className="text-base font-semibold"
+                >
+                  Full document comparison
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  View the extracted values from all three documents.
+                </p>
+              </div>
             <TooltipProvider>
               <div className="overflow-hidden rounded-xl border bg-card">
                 <div className="overflow-x-auto">
@@ -512,7 +808,8 @@ export function ResultsClient({ shipmentId }: { shipmentId: string }) {
                 </div>
               </div>
             </TooltipProvider>
-          </section>
+            </section>
+          </>
         )}
       </Main>
     </>
