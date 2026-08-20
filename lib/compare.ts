@@ -44,6 +44,16 @@ const FIELD_ORDER: (keyof DocFields)[] = [
   "vessel",
 ];
 
+const REQUIRED_DOCS: Partial<Record<keyof DocFields, DocKey[]>> = {
+  exporter: ["invoice", "packing_list", "bill_of_lading"],
+  consignee: ["invoice", "packing_list", "bill_of_lading"],
+  description_of_goods: ["invoice", "packing_list", "bill_of_lading"],
+  unit_quantity: ["invoice", "packing_list", "bill_of_lading"],
+  number_of_packages: ["packing_list", "bill_of_lading"],
+  net_weight_kg: ["packing_list", "bill_of_lading"],
+  gross_weight_kg: ["packing_list", "bill_of_lading"],
+};
+
 function isPresent(value: unknown): value is string | number {
   return value !== null && value !== undefined && value !== "";
 }
@@ -51,6 +61,124 @@ function isPresent(value: unknown): value is string | number {
 function normalize(value: unknown): string | null {
   if (!isPresent(value)) return null;
   return String(value).trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function normalizeCompany(value: unknown): string | null {
+  const text = normalize(value);
+  if (text === null) return null;
+  return text
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function companiesEquivalent(a: unknown, b: unknown): boolean {
+  const left = normalizeCompany(a);
+  const right = normalizeCompany(b);
+  if (left === null || right === null) return false;
+  if (left === right) return true;
+  const [shorter, longer] =
+    left.length <= right.length ? [left, right] : [right, left];
+  return shorter.split(" ").length >= 2 && longer.startsWith(`${shorter} `);
+}
+
+function normalizeVessel(value: unknown): string | null {
+  const text = normalize(value);
+  if (text === null) return null;
+  return text
+    .replace(/\b(?:voyage|voy|v)\.?\s*[-:]?\s*[a-z0-9-]+\b/gi, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/^(?:mv|m v|ms|m s|ss)\s+/, "");
+}
+
+function vesselsEquivalent(a: unknown, b: unknown): boolean {
+  const left = normalizeVessel(a);
+  const right = normalizeVessel(b);
+  if (left === null || right === null) return false;
+  return left === right || left.startsWith(`${right} `) || right.startsWith(`${left} `);
+}
+
+function normalizeHsCode(value: unknown): string | null {
+  if (!isPresent(value)) return null;
+  const digits = String(value).replace(/\D/g, "");
+  return digits || normalize(value);
+}
+
+function normalizePort(value: unknown): string | null {
+  const text = normalize(value);
+  if (text === null) return null;
+  return text
+    .split(",", 1)[0]
+    .replace(/^port of\s+/, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+const DESCRIPTION_SYNONYMS: Record<string, string> = {
+  art: "painting",
+  artwork: "painting",
+  picture: "painting",
+};
+
+function portsEquivalent(a: unknown, b: unknown): boolean {
+  const left = normalizePort(a);
+  const right = normalizePort(b);
+  if (left === null || right === null) return false;
+  return left === right || left.includes(right) || right.includes(left);
+}
+
+function descriptionTokens(value: unknown): Set<string> {
+  const text = normalize(value) ?? "";
+  const stopWords = new Set([
+    "a",
+    "an",
+    "and",
+    "of",
+    "on",
+    "the",
+    "original",
+    "originals",
+    "piece",
+    "pieces",
+    "pc",
+    "pcs",
+    "unit",
+    "units",
+    "crated",
+    "packed",
+    "package",
+    "packages",
+    "one",
+    "two",
+    "three",
+    "four",
+    "five",
+  ]);
+  const tokens = text
+    .replace(/[^a-z0-9]+/g, " ")
+    .split(/\s+/)
+    .filter(Boolean)
+    .filter((token) => !/^\d+$/.test(token) && !stopWords.has(token))
+    .map((token) =>
+      token.length > 4 && token.endsWith("s") ? token.slice(0, -1) : token,
+    )
+    .map((token) => DESCRIPTION_SYNONYMS[token] ?? token);
+  return new Set(tokens);
+}
+
+function descriptionsEquivalent(a: unknown, b: unknown): boolean {
+  if (similarity(a, b) >= 0.8) return true;
+  const left = descriptionTokens(a);
+  const right = descriptionTokens(b);
+  if (left.size === 0 || right.size === 0) return false;
+  const intersection = [...left].filter((token) => right.has(token)).length;
+  const union = new Set([...left, ...right]).size;
+  const jaccard = intersection / union;
+  const smallerCoverage = intersection / Math.min(left.size, right.size);
+  return jaccard >= 0.6 || smallerCoverage >= 0.8 || (intersection >= 2 && smallerCoverage >= 0.66);
 }
 
 // LCS-based similarity ratio (same spirit as Python's difflib.SequenceMatcher).
@@ -124,7 +252,19 @@ function fieldValuesEqual(
   b: string | number,
 ): boolean {
   if (field === "description_of_goods") {
-    return similarity(a, b) >= 0.8;
+    return descriptionsEquivalent(a, b);
+  }
+  if (field === "exporter" || field === "consignee") {
+    return companiesEquivalent(a, b);
+  }
+  if (field === "vessel") {
+    return vesselsEquivalent(a, b);
+  }
+  if (field === "port_of_loading" || field === "port_of_discharge") {
+    return portsEquivalent(a, b);
+  }
+  if (field === "hs_code") {
+    return normalizeHsCode(a) === normalizeHsCode(b);
   }
   if (
     ["gross_weight_kg", "net_weight_kg", "total_amount", "unit_quantity"].includes(
@@ -139,10 +279,7 @@ function fieldValuesEqual(
   if (field === "incoterms") {
     return incotermCode(a) === incotermCode(b);
   }
-  // Text fields: compare exactly as displayed (whitespace-normalized,
-  // case-preserved) so a case typo like "GmbH" vs "Gmbh" is flagged.
-  const ws = (s: string) => s.trim().replace(/\s+/g, " ");
-  return ws(String(a)) === ws(String(b));
+  return normalize(a) === normalize(b);
 }
 
 function analyzeValues(
@@ -182,23 +319,63 @@ export function compareDocuments(
 ): ComparisonResult {
   const issues: Issue[] = [];
 
-  // 1. Consignee — case-preserved, so "GmbH" vs "Gmbh" is caught.
-  const consignees = presentDocs(docs, "consignee");
-  if (Object.keys(consignees).length > 1) {
-    const values = Object.values(consignees).map(String);
-    const base = values[0];
-    const ws = (s: string) => s.trim().replace(/\s+/g, " ");
-    if (values.some((v) => ws(v) !== ws(base))) {
-      const looksLikeTypo = values.every((v) => similarity(base, v) >= 0.85);
-      issues.push({
-        severity: "error",
-        field: "Importer / Consignee",
-        message: `Consignee differs across documents${
-          looksLikeTypo ? " (looks like a typo)" : ""
-        }`,
-        detail: toDetail(consignees),
-      });
+  // Required-field coverage. A field is only considered missing on document
+  // types where it is expected, so invoice-only values do not create noise.
+  for (const [field, requiredDocs] of Object.entries(REQUIRED_DOCS) as [
+    keyof DocFields,
+    DocKey[],
+  ][]) {
+    const missing = requiredDocs.filter((key) => !isPresent(docs[key][field]));
+    if (missing.length === 0) continue;
+    issues.push({
+      severity: "warning",
+      field: LABELS[field],
+      message: `${LABELS[field]} is missing from ${missing
+        .map((key) => DOC_NAMES[key])
+        .join(", ")}`,
+      detail: Object.fromEntries(
+        requiredDocs.map((key) => [
+          DOC_NAMES[key],
+          isPresent(docs[key][field]) ? String(docs[key][field]) : "Missing",
+        ]),
+      ),
+    });
+  }
+
+  // Company names ignore casing, punctuation and whitespace. Close-but-not-
+  // equivalent names require review; clearly different entities are errors.
+  for (const field of ["exporter", "consignee"] as const) {
+    const valuesByDoc = presentDocs(docs, field);
+    const entries = Object.values(valuesByDoc).map(String);
+    if (entries.length < 2) continue;
+    if (entries.every((value) => companiesEquivalent(entries[0], value))) {
+      continue;
     }
+    const reference = entries[0];
+    const looksLikeTypo = entries.every(
+      (value) => similarity(normalizeCompany(reference), normalizeCompany(value)) >= 0.9,
+    );
+    issues.push({
+      severity: looksLikeTypo ? "warning" : "error",
+      field: LABELS[field],
+      message: `${LABELS[field]} differs across documents${
+        looksLikeTypo ? " (looks like a minor typo)" : ""
+      }`,
+      detail: toDetail(valuesByDoc),
+    });
+  }
+
+  // Quantity differences are material shipment discrepancies.
+  const quantities = presentDocs(docs, "unit_quantity");
+  if (
+    new Set(Object.values(quantities).map(Number).map(round2)).size > 1
+  ) {
+    issues.push({
+      severity: "error",
+      field: "Unit quantity",
+      message: "Quantity does not match",
+      detail: toDetail(quantities),
+    });
   }
 
   // 2. Number of packages (packing list vs bill of lading).
@@ -222,17 +399,20 @@ export function compareDocuments(
     });
   }
 
-  // 3. Gross weight (packing list vs bill of lading).
-  const grossWeights = presentDocs(docs, "gross_weight_kg");
-  if (new Set(Object.values(grossWeights).map(Number).map(round2)).size > 1) {
+  // 3. Net and gross weight (packing list vs bill of lading).
+  for (const field of ["net_weight_kg", "gross_weight_kg"] as const) {
+    const weights = presentDocs(docs, field);
+    if (new Set(Object.values(weights).map(Number).map(round2)).size <= 1) {
+      continue;
+    }
     const formatted: Partial<Record<DocKey, string | number>> = {};
-    for (const [key, value] of Object.entries(grossWeights)) {
+    for (const [key, value] of Object.entries(weights)) {
       formatted[key as DocKey] = `${formatKg(Number(value))} kg`;
     }
     issues.push({
       severity: "warning",
-      field: "Gross weight",
-      message: "Gross weight does not match",
+      field: LABELS[field],
+      message: `${field === "gross_weight_kg" ? "Gross" : "Net"} weight does not match`,
       detail: toDetail(formatted),
     });
   }
@@ -288,7 +468,19 @@ export function compareDocuments(
   }
 
   // 6. Painting support material (linen / canvas / paper...).
-  const MATERIALS = ["linen", "canvas", "paper", "silk", "cotton", "board"];
+  const MATERIALS = [
+    "linen",
+    "canvas",
+    "paper",
+    "silk",
+    "cotton",
+    "board",
+    "ceramic",
+    "wood",
+    "metal",
+    "glass",
+    "plastic",
+  ];
   const materials: Partial<Record<DocKey, string>> = {};
   for (const key of DOC_KEYS) {
     const description = normalize(docs[key].description_of_goods);
@@ -306,8 +498,8 @@ export function compareDocuments(
     }
     issues.push({
       severity: "warning",
-      field: "Material",
-      message: "Painting support material does not match",
+      field: "Description of goods",
+      message: "Product material does not match",
       detail: toDetail(raw),
     });
   }
@@ -324,7 +516,7 @@ export function compareDocuments(
     const base = present[0];
     let consistent: boolean;
     if (field === "description_of_goods") {
-      consistent = present.every((v) => similarity(base, v) >= 0.8);
+      consistent = present.every((v) => descriptionsEquivalent(base, v));
     } else if (
       ["gross_weight_kg", "net_weight_kg", "total_amount", "unit_quantity"].includes(field)
     ) {
@@ -334,6 +526,15 @@ export function compareDocuments(
       consistent = new Set(present.map((v) => firstInt(v))).size === 1;
     } else if (field === "incoterms") {
       consistent = new Set(present.map((v) => incotermCode(v))).size === 1;
+    } else if (field === "exporter" || field === "consignee") {
+      consistent = present.every((v) => companiesEquivalent(base, v));
+    } else if (field === "vessel") {
+      consistent = present.every((v) => vesselsEquivalent(base, v));
+    } else if (field === "port_of_loading" || field === "port_of_discharge") {
+      consistent = present.every((v) => portsEquivalent(base, v));
+    } else if (field === "hs_code") {
+      consistent =
+        new Set(present.map((v) => normalizeHsCode(v))).size === 1;
     } else {
       consistent = present.every((v) => similarity(base, v) >= 0.999);
     }
@@ -356,9 +557,13 @@ export function compareDocuments(
       (entry): entry is { key: DocKey; value: string | number } =>
         isPresent(entry.value),
     );
-    const { outliers, reference } = consistent
+    const { outliers: valueOutliers, reference } = consistent
       ? { outliers: [], reference: null }
       : analyzeValues(field, presentEntries);
+    const missingOutliers = (REQUIRED_DOCS[field] ?? []).filter(
+      (key) => !isPresent(docs[key][field]),
+    );
+    const outliers = [...new Set([...valueOutliers, ...missingOutliers])];
     rows.push({
       field: label,
       key: field,
