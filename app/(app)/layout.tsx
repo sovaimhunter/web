@@ -5,7 +5,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <SidebarProvider>
       <AppSidebar />
-      <SidebarInset className="flex min-h-svh flex-1 flex-col">
+      <SidebarInset className="app-shell flex min-h-svh flex-1 flex-col bg-transparent">
         {children}
       </SidebarInset>
     </SidebarProvider>

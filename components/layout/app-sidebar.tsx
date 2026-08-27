@@ -31,12 +31,14 @@ export function AppSidebar() {
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
               <Link href="/">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                  <Ship className="size-4" />
+                <div className="flex aspect-square size-8 items-center justify-center text-cyan-300">
+                  <Ship className="size-5 stroke-[1.8]" />
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold">TradeLynk</span>
-                  <span className="truncate text-xs text-muted-foreground">
+                  <span className="truncate font-semibold tracking-tight text-sidebar-foreground">
+                    TradeLynk
+                  </span>
+                  <span className="truncate text-xs text-sidebar-foreground/55">
                     Export document check
                   </span>
                 </div>
@@ -59,6 +61,7 @@ export function AppSidebar() {
                     asChild
                     isActive={active}
                     tooltip={item.title}
+                    className="rounded-lg"
                   >
                     <Link href={item.url}>
                       <item.icon />

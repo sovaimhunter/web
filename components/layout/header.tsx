@@ -11,7 +11,7 @@ export function Header({
   subtitle?: string;
 }) {
   return (
-    <header className="sticky top-0 z-50 flex h-16 items-center gap-3 border-b bg-background/85 px-4 backdrop-blur">
+    <header className="app-header sticky top-0 z-50 flex h-16 items-center gap-3 border-b px-4 backdrop-blur-xl sm:px-6">
       <SidebarTrigger />
       <Separator orientation="vertical" className="h-6" />
       <div className="min-w-0">

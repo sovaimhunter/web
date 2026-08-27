@@ -192,7 +192,7 @@ export default function ShipmentsPage() {
             </CardContent>
           </Card>
         ) : (
-          <div className="overflow-hidden rounded-md border bg-card">
+          <div className="brand-surface overflow-hidden rounded-xl border bg-card">
             <div className="overflow-x-auto">
               <Table className="min-w-xl">
                 <TableHeader>

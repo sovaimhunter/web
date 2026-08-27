@@ -8,7 +8,7 @@ export function Main({
   className?: string;
 }) {
   return (
-    <main className={`flex-1 px-4 py-6 sm:px-6 ${className ?? ""}`}>
+    <main className={`app-main flex-1 px-4 py-7 sm:px-7 lg:px-8 ${className ?? ""}`}>
       {children}
     </main>
   );
