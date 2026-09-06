@@ -41,12 +41,12 @@ export const DOC_NAMES: Record<DocKey, string> = {
   bill_of_lading: "Bill of Lading",
 };
 
-export type Severity = "error" | "warning";
+export type CheckStatus = "must_fix" | "review" | "passed";
 
-export type FieldStatus = "match" | "review" | "mismatch";
+export type ActionableCheckStatus = Exclude<CheckStatus, "passed">;
 
 export type Issue = {
-  severity: Severity;
+  status: ActionableCheckStatus;
   field: string;
   message: string;
   detail: Record<string, string>;
@@ -57,7 +57,7 @@ export type FieldRow = {
   key: string;
   vals: Record<DocKey, string | number | null>;
   consistent: boolean;
-  status: FieldStatus;
+  status: CheckStatus;
   outliers: DocKey[];
   reference: string | number | null;
 };
@@ -69,5 +69,44 @@ export type ComparisonResult = {
 };
 
 export type CheckResult = ComparisonResult & {
+  outcome: "completed";
   files: Record<DocKey, string>;
+};
+
+export type FailedCheckResult = {
+  outcome: "failed";
+  files: Partial<Record<DocKey, string>>;
+  failures: CheckFailure[];
+};
+
+export type StoredCheckResult = CheckResult | FailedCheckResult;
+
+export type CheckFailureStage = "upload" | "extraction" | "comparison";
+
+export type CheckFailureCode =
+  | "INVALID_REQUEST"
+  | "MISSING_DOCUMENT"
+  | "INVALID_FILE_TYPE"
+  | "EMPTY_FILE"
+  | "UPLOAD_TOO_LARGE"
+  | "UNREADABLE_PDF"
+  | "NO_FIELDS_EXTRACTED"
+  | "PROVIDER_TIMEOUT"
+  | "PROVIDER_UNAVAILABLE"
+  | "EXTRACTION_FAILED"
+  | "CHECK_FAILED"
+  | "NETWORK_ERROR";
+
+export type CheckFailure = {
+  code: CheckFailureCode;
+  stage: CheckFailureStage;
+  message: string;
+  action: string;
+  retryable: boolean;
+  document?: DocKey;
+};
+
+export type CheckErrorResponse = {
+  error: string;
+  failures: CheckFailure[];
 };

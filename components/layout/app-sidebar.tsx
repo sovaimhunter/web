@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ListTodo, PackagePlus, Ship } from "lucide-react";
+import { ListTodo, Ship } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -18,7 +18,6 @@ import {
 
 const NAV_ITEMS = [
   { title: "Shipments", url: "/", icon: ListTodo },
-  { title: "New shipment", url: "/shipments/new", icon: PackagePlus },
 ];
 
 export function AppSidebar() {
@@ -54,7 +53,7 @@ export function AppSidebar() {
             {NAV_ITEMS.map((item) => {
               const active =
                 pathname === item.url ||
-                (item.url !== "/" && pathname.startsWith(item.url));
+                (item.url === "/" && pathname.startsWith("/shipments"));
               return (
                 <SidebarMenuItem key={item.url}>
                   <SidebarMenuButton

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, PackagePlus } from "lucide-react";
+import { ArrowLeft, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Header } from "@/components/layout/header";
 import { Main } from "@/components/layout/main";
+import { WorkflowSteps } from "@/components/workflow-steps";
 import { createShipment } from "@/lib/shipments";
 
 export default function NewShipmentPage() {
@@ -36,7 +37,7 @@ export default function NewShipmentPage() {
 
   return (
     <>
-      <Header title="New shipment" subtitle="Create a shipment to get started" />
+      <Header title="New shipment" subtitle="Step 1 of 4 · Shipment details" />
       <Main className="mx-auto w-full max-w-xl">
         <Button asChild variant="ghost" className="mb-4 -ml-2">
           <Link href="/">
@@ -45,9 +46,11 @@ export default function NewShipmentPage() {
           </Link>
         </Button>
 
+        <WorkflowSteps currentStep={1} />
+
         <Card>
           <CardHeader>
-            <CardTitle>Create shipment</CardTitle>
+            <CardTitle>Shipment details</CardTitle>
             <CardDescription>
               Give this shipment a name, then upload its three export documents.
             </CardDescription>
@@ -77,8 +80,8 @@ export default function NewShipmentPage() {
               </div>
               {error && <p className="text-sm text-red-600">{error}</p>}
               <Button type="submit" className="w-full">
-                <PackagePlus />
-                Create & upload documents
+                Continue to upload documents
+                <ArrowRight />
               </Button>
             </form>
           </CardContent>

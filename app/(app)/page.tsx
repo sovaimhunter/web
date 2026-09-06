@@ -46,43 +46,38 @@ const EMPTY_SHIPMENTS: Shipment[] = [];
 
 /** Checked shipments open on their results; anything else opens on documents. */
 function shipmentHref(shipment: Shipment): string {
-  return shipment.status === "checked"
+  return shipment.status === "checked" || shipment.status === "check_failed"
     ? `/shipments/${shipment.id}/results`
     : `/shipments/${shipment.id}/documents`;
 }
 
 function StatusBadge({ shipment }: { shipment: Shipment }) {
   if (shipment.status === "checked") {
-    const mismatches = shipment.mismatchCount ?? shipment.errorCount ?? 0;
-    const reviews = shipment.reviewCount ?? shipment.warningCount ?? 0;
-    const hasMismatches = mismatches > 0;
-    const hasReviews = reviews > 0 && !hasMismatches;
+    const mustFix = shipment.mustFixCount ?? 0;
+    const reviews = shipment.reviewCount ?? 0;
+    const hasMustFix = mustFix > 0;
+    const hasReviews = reviews > 0 && !hasMustFix;
     return (
-      <Link
-        href={`/shipments/${shipment.id}/results`}
-        aria-label={`View results for ${shipment.name}`}
-        title="View results"
-        className="rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-        onClick={(event) => event.stopPropagation()}
+      <Badge
+        variant={hasMustFix ? "destructive" : "secondary"}
+        className={
+          hasReviews
+            ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+            : hasMustFix
+              ? ""
+              : "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300"
+        }
       >
-        <Badge
-          variant={hasMismatches ? "destructive" : "secondary"}
-          className={
-            hasReviews
-              ? "bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-900/40 dark:text-amber-300 dark:hover:bg-amber-900/60"
-              : hasMismatches
-                ? "hover:bg-destructive/20"
-                : "bg-muted text-muted-foreground hover:bg-muted-foreground/20"
-          }
-        >
-          {hasMismatches
-            ? `${mismatches} mismatch${mismatches === 1 ? "" : "es"}`
-            : hasReviews
-              ? `${reviews} require${reviews === 1 ? "s" : ""} review`
-              : "All matched"}
-        </Badge>
-      </Link>
+        {hasMustFix
+          ? `${mustFix} Must Fix`
+          : hasReviews
+            ? `${reviews} Review`
+            : "Passed"}
+      </Badge>
     );
+  }
+  if (shipment.status === "check_failed") {
+    return <Badge variant="destructive">Check incomplete</Badge>;
   }
   if (shipment.status === "documents_ready") {
     return <Badge variant="outline">Documents ready</Badge>;
@@ -154,12 +149,14 @@ export default function ShipmentsPage() {
               Here&apos;s a list of your shipments.
             </p>
           </div>
-          <Button asChild>
-            <Link href="/shipments/new">
-              <PackagePlus />
-              New shipment
-            </Link>
-          </Button>
+          {shipments.length > 0 && (
+            <Button asChild>
+              <Link href="/shipments/new">
+                <PackagePlus />
+                New shipment
+              </Link>
+            </Button>
+          )}
         </div>
 
         <div className="relative max-w-sm">
@@ -175,7 +172,11 @@ export default function ShipmentsPage() {
         {filtered.length === 0 ? (
           <Card>
             <CardHeader>
-              <CardTitle>No shipments yet</CardTitle>
+              <CardTitle>
+                {shipments.length === 0
+                  ? "No shipments yet"
+                  : "No matching shipments"}
+              </CardTitle>
               <CardDescription>
                 {shipments.length === 0
                   ? "Create your first shipment to upload documents and run a consistency check."
@@ -183,12 +184,18 @@ export default function ShipmentsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button asChild>
-                <Link href="/shipments/new">
-                  <PackagePlus />
-                  Create shipment
-                </Link>
-              </Button>
+              {shipments.length === 0 ? (
+                <Button asChild>
+                  <Link href="/shipments/new">
+                    <PackagePlus />
+                    New shipment
+                  </Link>
+                </Button>
+              ) : (
+                <Button variant="outline" onClick={() => setFilter("")}>
+                  Clear filter
+                </Button>
+              )}
             </CardContent>
           </Card>
         ) : (

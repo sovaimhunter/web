@@ -2,14 +2,17 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { compareDocuments } from "../lib/compare";
-import type { DocFields, DocKey, FieldStatus } from "../lib/types";
+import { normalizeCheckStatus } from "../lib/check-status";
+import type { CheckStatus, DocFields, DocKey } from "../lib/types";
+
+type StoredStatus = CheckStatus | "match" | "mismatch";
 
 type Scenario = {
   id: string;
   name: string;
   purpose: string;
   documents: Record<DocKey, DocFields>;
-  expected: Partial<Record<keyof DocFields, FieldStatus>>;
+  expected: Partial<Record<keyof DocFields, StoredStatus>>;
 };
 
 type Manifest = {
@@ -45,13 +48,16 @@ function main(): void {
     const scenarioFailures: string[] = [];
 
     for (const field of fields) {
-      const expected = scenario.expected[field] ?? "match";
+      const expected = normalizeCheckStatus(
+        scenario.expected[field],
+        "passed",
+      );
       const observed = actual.get(field);
-      if (expected !== "match") {
+      if (expected !== "passed") {
         planted += 1;
-        if (observed && observed !== "match") detected += 1;
+        if (observed && observed !== "passed") detected += 1;
         if (observed === expected) exact += 1;
-      } else if (observed && observed !== "match") {
+      } else if (observed && observed !== "passed") {
         falsePositives += 1;
       }
       if (observed !== expected) {

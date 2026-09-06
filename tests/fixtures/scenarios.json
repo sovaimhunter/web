@@ -1,0 +1,1296 @@
+{
+  "version": 1,
+  "scenario_count": 15,
+  "documents_per_scenario": 3,
+  "required_fields": {
+    "exporter": [
+      "invoice",
+      "packing_list",
+      "bill_of_lading"
+    ],
+    "consignee": [
+      "invoice",
+      "packing_list",
+      "bill_of_lading"
+    ],
+    "description_of_goods": [
+      "invoice",
+      "packing_list",
+      "bill_of_lading"
+    ],
+    "unit_quantity": [
+      "invoice",
+      "packing_list",
+      "bill_of_lading"
+    ],
+    "number_of_packages": [
+      "packing_list",
+      "bill_of_lading"
+    ],
+    "net_weight_kg": [
+      "packing_list",
+      "bill_of_lading"
+    ],
+    "gross_weight_kg": [
+      "packing_list",
+      "bill_of_lading"
+    ]
+  },
+  "scenarios": [
+    {
+      "id": "01-clean-baseline",
+      "name": "Clean baseline",
+      "purpose": "All comparable values are identical.",
+      "documents": {
+        "invoice": {
+          "exporter": "Outback Origins Art Co.",
+          "consignee": "Galerie Nordlicht GmbH",
+          "description_of_goods": "Aboriginal acrylic on canvas",
+          "hs_code": "9701.21",
+          "country_of_origin": "Australia",
+          "incoterms": "CIF Hamburg",
+          "port_of_loading": "Sydney, Australia",
+          "port_of_discharge": "Hamburg, Germany",
+          "vessel": "MV Southern Star",
+          "unit_quantity": 3,
+          "number_of_packages": null,
+          "net_weight_kg": null,
+          "gross_weight_kg": null,
+          "total_amount": 24500,
+          "currency": "AUD",
+          "line_items": [
+            {
+              "description": "Desert Waterholes - acrylic on canvas",
+              "quantity": 1,
+              "unit_price": 9500,
+              "amount": 9500
+            },
+            {
+              "description": "Bush Tucker Dreaming - acrylic on canvas",
+              "quantity": 1,
+              "unit_price": 7000,
+              "amount": 7000
+            },
+            {
+              "description": "Seven Sisters Songline - acrylic on canvas",
+              "quantity": 1,
+              "unit_price": 8000,
+              "amount": 8000
+            }
+          ]
+        },
+        "packing_list": {
+          "exporter": "Outback Origins Art Co.",
+          "consignee": "Galerie Nordlicht GmbH",
+          "description_of_goods": "Aboriginal acrylic paintings on canvas",
+          "hs_code": "9701.21",
+          "country_of_origin": "Australia",
+          "incoterms": "CIF Hamburg",
+          "port_of_loading": "Sydney, Australia",
+          "port_of_discharge": "Hamburg, Germany",
+          "vessel": "MV Southern Star",
+          "unit_quantity": 3,
+          "number_of_packages": "1 wooden crate",
+          "net_weight_kg": 12,
+          "gross_weight_kg": 18.5,
+          "total_amount": null,
+          "currency": "AUD",
+          "line_items": null
+        },
+        "bill_of_lading": {
+          "exporter": "Outback Origins Art Co.",
+          "consignee": "Galerie Nordlicht GmbH",
+          "description_of_goods": "Original Aboriginal acrylic paintings on canvas, crated",
+          "hs_code": "9701.21",
+          "country_of_origin": "Australia",
+          "incoterms": null,
+          "port_of_loading": "Sydney, Australia",
+          "port_of_discharge": "Hamburg, Germany",
+          "vessel": "MV Southern Star",
+          "unit_quantity": 3,
+          "number_of_packages": "1 wooden crate",
+          "net_weight_kg": 12,
+          "gross_weight_kg": 18.5,
+          "total_amount": null,
+          "currency": null,
+          "line_items": null
+        }
+      },
+      "display_overrides": {},
+      "expected": {}
+    },
+    {
+      "id": "02-exporter-mismatch",
+      "name": "Exporter name mismatch",
+      "purpose": "The bill of lading names a different exporter.",
+      "documents": {
+        "invoice": {
+          "exporter": "Outback Origins Art Co.",
+          "consignee": "Galerie Nordlicht GmbH",
+          "description_of_goods": "Aboriginal acrylic on canvas",
+          "hs_code": "9701.21",
+          "country_of_origin": "Australia",
+          "incoterms": "CIF Hamburg",
+          "port_of_loading": "Sydney, Australia",
+          "port_of_discharge": "Hamburg, Germany",
+          "vessel": "MV Southern Star",
+          "unit_quantity": 3,
+          "number_of_packages": null,
+          "net_weight_kg": null,
+          "gross_weight_kg": null,
+          "total_amount": 24500,
+          "currency": "AUD",
+          "line_items": [
+            {
+              "description": "Desert Waterholes - acrylic on canvas",
+              "quantity": 1,
+              "unit_price": 9500,
+              "amount": 9500
+            },
+            {
+              "description": "Bush Tucker Dreaming - acrylic on canvas",
+              "quantity": 1,
+              "unit_price": 7000,
+              "amount": 7000
+            },
+            {
+              "description": "Seven Sisters Songline - acrylic on canvas",
+              "quantity": 1,
+              "unit_price": 8000,
+              "amount": 8000
+            }
+          ]
+        },
+        "packing_list": {
+          "exporter": "Outback Origins Art Co.",
+          "consignee": "Galerie Nordlicht GmbH",
+          "description_of_goods": "Aboriginal acrylic paintings on canvas",
+          "hs_code": "9701.21",
+          "country_of_origin": "Australia",
+          "incoterms": "CIF Hamburg",
+          "port_of_loading": "Sydney, Australia",
+          "port_of_discharge": "Hamburg, Germany",
+          "vessel": "MV Southern Star",
+          "unit_quantity": 3,
+          "number_of_packages": "1 wooden crate",
+          "net_weight_kg": 12,
+          "gross_weight_kg": 18.5,
+          "total_amount": null,
+          "currency": "AUD",
+          "line_items": null
+        },
+        "bill_of_lading": {
+          "exporter": "Southern Cross Art Exports Pty Ltd",
+          "consignee": "Galerie Nordlicht GmbH",
+          "description_of_goods": "Original Aboriginal acrylic paintings on canvas, crated",
+          "hs_code": "9701.21",
+          "country_of_origin": "Australia",
+          "incoterms": null,
+          "port_of_loading": "Sydney, Australia",
+          "port_of_discharge": "Hamburg, Germany",
+          "vessel": "MV Southern Star",
+          "unit_quantity": 3,
+          "number_of_packages": "1 wooden crate",
+          "net_weight_kg": 12,
+          "gross_weight_kg": 18.5,
+          "total_amount": null,
+          "currency": null,
+          "line_items": null
+        }
+      },
+      "display_overrides": {},
+      "expected": {
+        "exporter": "mismatch"
+      }
+    },
+    {
+      "id": "03-importer-mismatch",
+      "name": "Importer name mismatch",
+      "purpose": "The packing list names a different importer.",
+      "documents": {
+        "invoice": {
+          "exporter": "Outback Origins Art Co.",
+          "consignee": "Galerie Nordlicht GmbH",
+          "description_of_goods": "Aboriginal acrylic on canvas",
+          "hs_code": "9701.21",
+          "country_of_origin": "Australia",
+          "incoterms": "CIF Hamburg",
+          "port_of_loading": "Sydney, Australia",
+          "port_of_discharge": "Hamburg, Germany",
+          "vessel": "MV Southern Star",
+          "unit_quantity": 3,
+          "number_of_packages": null,
+          "net_weight_kg": null,
+          "gross_weight_kg": null,
+          "total_amount": 24500,
+          "currency": "AUD",
+          "line_items": [
+            {
+              "description": "Desert Waterholes - acrylic on canvas",
+              "quantity": 1,
+              "unit_price": 9500,
+              "amount": 9500
+            },
+            {
+              "description": "Bush Tucker Dreaming - acrylic on canvas",
+              "quantity": 1,
+              "unit_price": 7000,
+              "amount": 7000
+            },
+            {
+              "description": "Seven Sisters Songline - acrylic on canvas",
+              "quantity": 1,
+              "unit_price": 8000,
+              "amount": 8000
+            }
+          ]
+        },
+        "packing_list": {
+          "exporter": "Outback Origins Art Co.",
+          "consignee": "Berlin Fine Art Imports GmbH",
+          "description_of_goods": "Aboriginal acrylic paintings on canvas",
+          "hs_code": "9701.21",
+          "country_of_origin": "Australia",
+          "incoterms": "CIF Hamburg",
+          "port_of_loading": "Sydney, Australia",
+          "port_of_discharge": "Hamburg, Germany",
+          "vessel": "MV Southern Star",
+          "unit_quantity": 3,
+          "number_of_packages": "1 wooden crate",
+          "net_weight_kg": 12,
+          "gross_weight_kg": 18.5,
+          "total_amount": null,
+          "currency": "AUD",
+          "line_items": null
+        },
+        "bill_of_lading": {
+          "exporter": "Outback Origins Art Co.",
+          "consignee": "Galerie Nordlicht GmbH",
+          "description_of_goods": "Original Aboriginal acrylic paintings on canvas, crated",
+          "hs_code": "9701.21",
+          "country_of_origin": "Australia",
+          "incoterms": null,
+          "port_of_loading": "Sydney, Australia",
+          "port_of_discharge": "Hamburg, Germany",
+          "vessel": "MV Southern Star",
+          "unit_quantity": 3,
+          "number_of_packages": "1 wooden crate",
+          "net_weight_kg": 12,
+          "gross_weight_kg": 18.5,
+          "total_amount": null,
+          "currency": null,
+          "line_items": null
+        }
+      },
+      "display_overrides": {},
+      "expected": {
+        "consignee": "mismatch"
+      }
+    },
+    {
+      "id": "04-benign-company-formatting",
+      "name": "Benign company formatting",
+      "purpose": "Case and punctuation differ without changing the legal entity.",
+      "documents": {
+        "invoice": {
+          "exporter": "Outback Origins Art Co.",
+          "consignee": "Galerie Nordlicht GmbH",
+          "description_of_goods": "Aboriginal acrylic on canvas",
+          "hs_code": "9701.21",
+          "country_of_origin": "Australia",
+          "incoterms": "CIF Hamburg",
+          "port_of_loading": "Sydney, Australia",
+          "port_of_discharge": "Hamburg, Germany",
+          "vessel": "MV Southern Star",
+          "unit_quantity": 3,
+          "number_of_packages": null,
+          "net_weight_kg": null,
+          "gross_weight_kg": null,
+          "total_amount": 24500,
+          "currency": "AUD",
+          "line_items": [
+            {
+              "description": "Desert Waterholes - acrylic on canvas",
+              "quantity": 1,
+              "unit_price": 9500,
+              "amount": 9500
+            },
+            {
+              "description": "Bush Tucker Dreaming - acrylic on canvas",
+              "quantity": 1,
+              "unit_price": 7000,
+              "amount": 7000
+            },
+            {
+              "description": "Seven Sisters Songline - acrylic on canvas",
+              "quantity": 1,
+              "unit_price": 8000,
+              "amount": 8000
+            }
+          ]
+        },
+        "packing_list": {
+          "exporter": "OUTBACK ORIGINS ART CO",
+          "consignee": "Galerie Nordlicht GmbH",
+          "description_of_goods": "Aboriginal acrylic paintings on canvas",
+          "hs_code": "9701.21",
+          "country_of_origin": "Australia",
+          "incoterms": "CIF Hamburg",
+          "port_of_loading": "Sydney, Australia",
+          "port_of_discharge": "Hamburg, Germany",
+          "vessel": "MV Southern Star",
+          "unit_quantity": 3,
+          "number_of_packages": "1 wooden crate",
+          "net_weight_kg": 12,
+          "gross_weight_kg": 18.5,
+          "total_amount": null,
+          "currency": "AUD",
+          "line_items": null
+        },
+        "bill_of_lading": {
+          "exporter": "Outback Origins Art Co",
+          "consignee": "Galerie Nordlicht GmbH",
+          "description_of_goods": "Original Aboriginal acrylic paintings on canvas, crated",
+          "hs_code": "9701.21",
+          "country_of_origin": "Australia",
+          "incoterms": null,
+          "port_of_loading": "Sydney, Australia",
+          "port_of_discharge": "Hamburg, Germany",
+          "vessel": "MV Southern Star",
+          "unit_quantity": 3,
+          "number_of_packages": "1 wooden crate",
+          "net_weight_kg": 12,
+          "gross_weight_kg": 18.5,
+          "total_amount": null,
+          "currency": null,
+          "line_items": null
+        }
+      },
+      "display_overrides": {},
+      "expected": {}
+    },
+    {
+      "id": "05-product-description-mismatch",
+      "name": "Product description mismatch",
+      "purpose": "The packing list describes a different type and material of goods.",
+      "documents": {
+        "invoice": {
+          "exporter": "Outback Origins Art Co.",
+          "consignee": "Galerie Nordlicht GmbH",
+          "description_of_goods": "Aboriginal acrylic on canvas",
+          "hs_code": "9701.21",
+          "country_of_origin": "Australia",
+          "incoterms": "CIF Hamburg",
+          "port_of_loading": "Sydney, Australia",
+          "port_of_discharge": "Hamburg, Germany",
+          "vessel": "MV Southern Star",
+          "unit_quantity": 3,
+          "number_of_packages": null,
+          "net_weight_kg": null,
+          "gross_weight_kg": null,
+          "total_amount": 24500,
+          "currency": "AUD",
+          "line_items": [
+            {
+              "description": "Desert Waterholes - acrylic on canvas",
+              "quantity": 1,
+              "unit_price": 9500,
+              "amount": 9500
+            },
+            {
+              "description": "Bush Tucker Dreaming - acrylic on canvas",
+              "quantity": 1,
+              "unit_price": 7000,
+              "amount": 7000
+            },
+            {
+              "description": "Seven Sisters Songline - acrylic on canvas",
+              "quantity": 1,
+              "unit_price": 8000,
+              "amount": 8000
+            }
+          ]
+        },
+        "packing_list": {
+          "exporter": "Outback Origins Art Co.",
+          "consignee": "Galerie Nordlicht GmbH",
+          "description_of_goods": "Handmade ceramic sculptures",
+          "hs_code": "9701.21",
+          "country_of_origin": "Australia",
+          "incoterms": "CIF Hamburg",
+          "port_of_loading": "Sydney, Australia",
+          "port_of_discharge": "Hamburg, Germany",
+          "vessel": "MV Southern Star",
+          "unit_quantity": 3,
+          "number_of_packages": "1 wooden crate",
+          "net_weight_kg": 12,
+          "gross_weight_kg": 18.5,
+          "total_amount": null,
+          "currency": "AUD",
+          "line_items": null
+        },
+        "bill_of_lading": {
+          "exporter": "Outback Origins Art Co.",
+          "consignee": "Galerie Nordlicht GmbH",
+          "description_of_goods": "Original Aboriginal acrylic paintings on canvas, crated",
+          "hs_code": "9701.21",
+          "country_of_origin": "Australia",
+          "incoterms": null,
+          "port_of_loading": "Sydney, Australia",
+          "port_of_discharge": "Hamburg, Germany",
+          "vessel": "MV Southern Star",
+          "unit_quantity": 3,
+          "number_of_packages": "1 wooden crate",
+          "net_weight_kg": 12,
+          "gross_weight_kg": 18.5,
+          "total_amount": null,
+          "currency": null,
+          "line_items": null
+        }
+      },
+      "display_overrides": {},
+      "expected": {
+        "description_of_goods": "review"
+      }
+    },
+    {
+      "id": "06-benign-description-wording",
+      "name": "Benign description wording",
+      "purpose": "The same goods are described with minor wording differences.",
+      "documents": {
+        "invoice": {
+          "exporter": "Outback Origins Art Co.",
+          "consignee": "Galerie Nordlicht GmbH",
+          "description_of_goods": "Aboriginal acrylic on canvas",
+          "hs_code": "9701.21",
+          "country_of_origin": "Australia",
+          "incoterms": "CIF Hamburg",
+          "port_of_loading": "Sydney, Australia",
+          "port_of_discharge": "Hamburg, Germany",
+          "vessel": "MV Southern Star",
+          "unit_quantity": 3,
+          "number_of_packages": null,
+          "net_weight_kg": null,
+          "gross_weight_kg": null,
+          "total_amount": 24500,
+          "currency": "AUD",
+          "line_items": [
+            {
+              "description": "Desert Waterholes - acrylic on canvas",
+              "quantity": 1,
+              "unit_price": 9500,
+              "amount": 9500
+            },
+            {
+              "description": "Bush Tucker Dreaming - acrylic on canvas",
+              "quantity": 1,
+              "unit_price": 7000,
+              "amount": 7000
+            },
+            {
+              "description": "Seven Sisters Songline - acrylic on canvas",
+              "quantity": 1,
+              "unit_price": 8000,
+              "amount": 8000
+            }
+          ]
+        },
+        "packing_list": {
+          "exporter": "Outback Origins Art Co.",
+          "consignee": "Galerie Nordlicht GmbH",
+          "description_of_goods": "3 Aboriginal acrylic paintings on canvas",
+          "hs_code": "9701.21",
+          "country_of_origin": "Australia",
+          "incoterms": "CIF Hamburg",
+          "port_of_loading": "Sydney, Australia",
+          "port_of_discharge": "Hamburg, Germany",
+          "vessel": "MV Southern Star",
+          "unit_quantity": 3,
+          "number_of_packages": "1 wooden crate",
+          "net_weight_kg": 12,
+          "gross_weight_kg": 18.5,
+          "total_amount": null,
+          "currency": "AUD",
+          "line_items": null
+        },
+        "bill_of_lading": {
+          "exporter": "Outback Origins Art Co.",
+          "consignee": "Galerie Nordlicht GmbH",
+          "description_of_goods": "Three original Aboriginal acrylic canvas paintings, crated",
+          "hs_code": "9701.21",
+          "country_of_origin": "Australia",
+          "incoterms": null,
+          "port_of_loading": "Sydney, Australia",
+          "port_of_discharge": "Hamburg, Germany",
+          "vessel": "MV Southern Star",
+          "unit_quantity": 3,
+          "number_of_packages": "1 wooden crate",
+          "net_weight_kg": 12,
+          "gross_weight_kg": 18.5,
+          "total_amount": null,
+          "currency": null,
+          "line_items": null
+        }
+      },
+      "display_overrides": {},
+      "expected": {}
+    },
+    {
+      "id": "07-quantity-mismatch",
+      "name": "Quantity mismatch",
+      "purpose": "The packing list quantity differs from the invoice and bill of lading.",
+      "documents": {
+        "invoice": {
+          "exporter": "Outback Origins Art Co.",
+          "consignee": "Galerie Nordlicht GmbH",
+          "description_of_goods": "Aboriginal acrylic on canvas",
+          "hs_code": "9701.21",
+          "country_of_origin": "Australia",
+          "incoterms": "CIF Hamburg",
+          "port_of_loading": "Sydney, Australia",
+          "port_of_discharge": "Hamburg, Germany",
+          "vessel": "MV Southern Star",
+          "unit_quantity": 3,
+          "number_of_packages": null,
+          "net_weight_kg": null,
+          "gross_weight_kg": null,
+          "total_amount": 24500,
+          "currency": "AUD",
+          "line_items": [
+            {
+              "description": "Desert Waterholes - acrylic on canvas",
+              "quantity": 1,
+              "unit_price": 9500,
+              "amount": 9500
+            },
+            {
+              "description": "Bush Tucker Dreaming - acrylic on canvas",
+              "quantity": 1,
+              "unit_price": 7000,
+              "amount": 7000
+            },
+            {
+              "description": "Seven Sisters Songline - acrylic on canvas",
+              "quantity": 1,
+              "unit_price": 8000,
+              "amount": 8000
+            }
+          ]
+        },
+        "packing_list": {
+          "exporter": "Outback Origins Art Co.",
+          "consignee": "Galerie Nordlicht GmbH",
+          "description_of_goods": "Aboriginal acrylic paintings on canvas",
+          "hs_code": "9701.21",
+          "country_of_origin": "Australia",
+          "incoterms": "CIF Hamburg",
+          "port_of_loading": "Sydney, Australia",
+          "port_of_discharge": "Hamburg, Germany",
+          "vessel": "MV Southern Star",
+          "unit_quantity": 4,
+          "number_of_packages": "1 wooden crate",
+          "net_weight_kg": 12,
+          "gross_weight_kg": 18.5,
+          "total_amount": null,
+          "currency": "AUD",
+          "line_items": null
+        },
+        "bill_of_lading": {
+          "exporter": "Outback Origins Art Co.",
+          "consignee": "Galerie Nordlicht GmbH",
+          "description_of_goods": "Original Aboriginal acrylic paintings on canvas, crated",
+          "hs_code": "9701.21",
+          "country_of_origin": "Australia",
+          "incoterms": null,
+          "port_of_loading": "Sydney, Australia",
+          "port_of_discharge": "Hamburg, Germany",
+          "vessel": "MV Southern Star",
+          "unit_quantity": 3,
+          "number_of_packages": "1 wooden crate",
+          "net_weight_kg": 12,
+          "gross_weight_kg": 18.5,
+          "total_amount": null,
+          "currency": null,
+          "line_items": null
+        }
+      },
+      "display_overrides": {},
+      "expected": {
+        "unit_quantity": "mismatch"
+      }
+    },
+    {
+      "id": "08-equivalent-quantity-formatting",
+      "name": "Equivalent quantity formatting",
+      "purpose": "Equivalent quantities use different units and formatting.",
+      "documents": {
+        "invoice": {
+          "exporter": "Outback Origins Art Co.",
+          "consignee": "Galerie Nordlicht GmbH",
+          "description_of_goods": "Aboriginal acrylic on canvas",
+          "hs_code": "9701.21",
+          "country_of_origin": "Australia",
+          "incoterms": "CIF Hamburg",
+          "port_of_loading": "Sydney, Australia",
+          "port_of_discharge": "Hamburg, Germany",
+          "vessel": "MV Southern Star",
+          "unit_quantity": 3,
+          "number_of_packages": null,
+          "net_weight_kg": null,
+          "gross_weight_kg": null,
+          "total_amount": 24500,
+          "currency": "AUD",
+          "line_items": [
+            {
+              "description": "Desert Waterholes - acrylic on canvas",
+              "quantity": 1,
+              "unit_price": 9500,
+              "amount": 9500
+            },
+            {
+              "description": "Bush Tucker Dreaming - acrylic on canvas",
+              "quantity": 1,
+              "unit_price": 7000,
+              "amount": 7000
+            },
+            {
+              "description": "Seven Sisters Songline - acrylic on canvas",
+              "quantity": 1,
+              "unit_price": 8000,
+              "amount": 8000
+            }
+          ]
+        },
+        "packing_list": {
+          "exporter": "Outback Origins Art Co.",
+          "consignee": "Galerie Nordlicht GmbH",
+          "description_of_goods": "Aboriginal acrylic paintings on canvas",
+          "hs_code": "9701.21",
+          "country_of_origin": "Australia",
+          "incoterms": "CIF Hamburg",
+          "port_of_loading": "Sydney, Australia",
+          "port_of_discharge": "Hamburg, Germany",
+          "vessel": "MV Southern Star",
+          "unit_quantity": 3,
+          "number_of_packages": "1 wooden crate",
+          "net_weight_kg": 12,
+          "gross_weight_kg": 18.5,
+          "total_amount": null,
+          "currency": "AUD",
+          "line_items": null
+        },
+        "bill_of_lading": {
+          "exporter": "Outback Origins Art Co.",
+          "consignee": "Galerie Nordlicht GmbH",
+          "description_of_goods": "Original Aboriginal acrylic paintings on canvas, crated",
+          "hs_code": "9701.21",
+          "country_of_origin": "Australia",
+          "incoterms": null,
+          "port_of_loading": "Sydney, Australia",
+          "port_of_discharge": "Hamburg, Germany",
+          "vessel": "MV Southern Star",
+          "unit_quantity": 3,
+          "number_of_packages": "1 wooden crate",
+          "net_weight_kg": 12,
+          "gross_weight_kg": 18.5,
+          "total_amount": null,
+          "currency": null,
+          "line_items": null
+        }
+      },
+      "display_overrides": {
+        "invoice.unit_quantity": "3 pcs",
+        "packing_list.unit_quantity": "03 pieces",
+        "bill_of_lading.unit_quantity": "Three (3) units"
+      },
+      "expected": {}
+    },
+    {
+      "id": "09-weight-mismatch",
+      "name": "Weight mismatch",
+      "purpose": "The bill of lading gross weight differs from the packing list.",
+      "documents": {
+        "invoice": {
+          "exporter": "Outback Origins Art Co.",
+          "consignee": "Galerie Nordlicht GmbH",
+          "description_of_goods": "Aboriginal acrylic on canvas",
+          "hs_code": "9701.21",
+          "country_of_origin": "Australia",
+          "incoterms": "CIF Hamburg",
+          "port_of_loading": "Sydney, Australia",
+          "port_of_discharge": "Hamburg, Germany",
+          "vessel": "MV Southern Star",
+          "unit_quantity": 3,
+          "number_of_packages": null,
+          "net_weight_kg": null,
+          "gross_weight_kg": null,
+          "total_amount": 24500,
+          "currency": "AUD",
+          "line_items": [
+            {
+              "description": "Desert Waterholes - acrylic on canvas",
+              "quantity": 1,
+              "unit_price": 9500,
+              "amount": 9500
+            },
+            {
+              "description": "Bush Tucker Dreaming - acrylic on canvas",
+              "quantity": 1,
+              "unit_price": 7000,
+              "amount": 7000
+            },
+            {
+              "description": "Seven Sisters Songline - acrylic on canvas",
+              "quantity": 1,
+              "unit_price": 8000,
+              "amount": 8000
+            }
+          ]
+        },
+        "packing_list": {
+          "exporter": "Outback Origins Art Co.",
+          "consignee": "Galerie Nordlicht GmbH",
+          "description_of_goods": "Aboriginal acrylic paintings on canvas",
+          "hs_code": "9701.21",
+          "country_of_origin": "Australia",
+          "incoterms": "CIF Hamburg",
+          "port_of_loading": "Sydney, Australia",
+          "port_of_discharge": "Hamburg, Germany",
+          "vessel": "MV Southern Star",
+          "unit_quantity": 3,
+          "number_of_packages": "1 wooden crate",
+          "net_weight_kg": 12,
+          "gross_weight_kg": 18.5,
+          "total_amount": null,
+          "currency": "AUD",
+          "line_items": null
+        },
+        "bill_of_lading": {
+          "exporter": "Outback Origins Art Co.",
+          "consignee": "Galerie Nordlicht GmbH",
+          "description_of_goods": "Original Aboriginal acrylic paintings on canvas, crated",
+          "hs_code": "9701.21",
+          "country_of_origin": "Australia",
+          "incoterms": null,
+          "port_of_loading": "Sydney, Australia",
+          "port_of_discharge": "Hamburg, Germany",
+          "vessel": "MV Southern Star",
+          "unit_quantity": 3,
+          "number_of_packages": "1 wooden crate",
+          "net_weight_kg": 12,
+          "gross_weight_kg": 20,
+          "total_amount": null,
+          "currency": null,
+          "line_items": null
+        }
+      },
+      "display_overrides": {},
+      "expected": {
+        "gross_weight_kg": "review"
+      }
+    },
+    {
+      "id": "10-equivalent-weight-units",
+      "name": "Equivalent weight units",
+      "purpose": "Equivalent weights are printed in kilograms and metric tonnes.",
+      "documents": {
+        "invoice": {
+          "exporter": "Outback Origins Art Co.",
+          "consignee": "Galerie Nordlicht GmbH",
+          "description_of_goods": "Aboriginal acrylic on canvas",
+          "hs_code": "9701.21",
+          "country_of_origin": "Australia",
+          "incoterms": "CIF Hamburg",
+          "port_of_loading": "Sydney, Australia",
+          "port_of_discharge": "Hamburg, Germany",
+          "vessel": "MV Southern Star",
+          "unit_quantity": 3,
+          "number_of_packages": null,
+          "net_weight_kg": null,
+          "gross_weight_kg": null,
+          "total_amount": 24500,
+          "currency": "AUD",
+          "line_items": [
+            {
+              "description": "Desert Waterholes - acrylic on canvas",
+              "quantity": 1,
+              "unit_price": 9500,
+              "amount": 9500
+            },
+            {
+              "description": "Bush Tucker Dreaming - acrylic on canvas",
+              "quantity": 1,
+              "unit_price": 7000,
+              "amount": 7000
+            },
+            {
+              "description": "Seven Sisters Songline - acrylic on canvas",
+              "quantity": 1,
+              "unit_price": 8000,
+              "amount": 8000
+            }
+          ]
+        },
+        "packing_list": {
+          "exporter": "Outback Origins Art Co.",
+          "consignee": "Galerie Nordlicht GmbH",
+          "description_of_goods": "Aboriginal acrylic paintings on canvas",
+          "hs_code": "9701.21",
+          "country_of_origin": "Australia",
+          "incoterms": "CIF Hamburg",
+          "port_of_loading": "Sydney, Australia",
+          "port_of_discharge": "Hamburg, Germany",
+          "vessel": "MV Southern Star",
+          "unit_quantity": 3,
+          "number_of_packages": "1 wooden crate",
+          "net_weight_kg": 12,
+          "gross_weight_kg": 18.5,
+          "total_amount": null,
+          "currency": "AUD",
+          "line_items": null
+        },
+        "bill_of_lading": {
+          "exporter": "Outback Origins Art Co.",
+          "consignee": "Galerie Nordlicht GmbH",
+          "description_of_goods": "Original Aboriginal acrylic paintings on canvas, crated",
+          "hs_code": "9701.21",
+          "country_of_origin": "Australia",
+          "incoterms": null,
+          "port_of_loading": "Sydney, Australia",
+          "port_of_discharge": "Hamburg, Germany",
+          "vessel": "MV Southern Star",
+          "unit_quantity": 3,
+          "number_of_packages": "1 wooden crate",
+          "net_weight_kg": 12,
+          "gross_weight_kg": 18.5,
+          "total_amount": null,
+          "currency": null,
+          "line_items": null
+        }
+      },
+      "display_overrides": {
+        "packing_list.gross_weight_kg": "18.5 kg",
+        "bill_of_lading.gross_weight_kg": "0.0185 metric tonnes"
+      },
+      "expected": {}
+    },
+    {
+      "id": "11-currency-mismatch",
+      "name": "Currency mismatch",
+      "purpose": "The packing list currency differs from the invoice and bill of lading.",
+      "documents": {
+        "invoice": {
+          "exporter": "Outback Origins Art Co.",
+          "consignee": "Galerie Nordlicht GmbH",
+          "description_of_goods": "Aboriginal acrylic on canvas",
+          "hs_code": "9701.21",
+          "country_of_origin": "Australia",
+          "incoterms": "CIF Hamburg",
+          "port_of_loading": "Sydney, Australia",
+          "port_of_discharge": "Hamburg, Germany",
+          "vessel": "MV Southern Star",
+          "unit_quantity": 3,
+          "number_of_packages": null,
+          "net_weight_kg": null,
+          "gross_weight_kg": null,
+          "total_amount": 24500,
+          "currency": "AUD",
+          "line_items": [
+            {
+              "description": "Desert Waterholes - acrylic on canvas",
+              "quantity": 1,
+              "unit_price": 9500,
+              "amount": 9500
+            },
+            {
+              "description": "Bush Tucker Dreaming - acrylic on canvas",
+              "quantity": 1,
+              "unit_price": 7000,
+              "amount": 7000
+            },
+            {
+              "description": "Seven Sisters Songline - acrylic on canvas",
+              "quantity": 1,
+              "unit_price": 8000,
+              "amount": 8000
+            }
+          ]
+        },
+        "packing_list": {
+          "exporter": "Outback Origins Art Co.",
+          "consignee": "Galerie Nordlicht GmbH",
+          "description_of_goods": "Aboriginal acrylic paintings on canvas",
+          "hs_code": "9701.21",
+          "country_of_origin": "Australia",
+          "incoterms": "CIF Hamburg",
+          "port_of_loading": "Sydney, Australia",
+          "port_of_discharge": "Hamburg, Germany",
+          "vessel": "MV Southern Star",
+          "unit_quantity": 3,
+          "number_of_packages": "1 wooden crate",
+          "net_weight_kg": 12,
+          "gross_weight_kg": 18.5,
+          "total_amount": null,
+          "currency": "USD",
+          "line_items": null
+        },
+        "bill_of_lading": {
+          "exporter": "Outback Origins Art Co.",
+          "consignee": "Galerie Nordlicht GmbH",
+          "description_of_goods": "Original Aboriginal acrylic paintings on canvas, crated",
+          "hs_code": "9701.21",
+          "country_of_origin": "Australia",
+          "incoterms": null,
+          "port_of_loading": "Sydney, Australia",
+          "port_of_discharge": "Hamburg, Germany",
+          "vessel": "MV Southern Star",
+          "unit_quantity": 3,
+          "number_of_packages": "1 wooden crate",
+          "net_weight_kg": 12,
+          "gross_weight_kg": 18.5,
+          "total_amount": null,
+          "currency": null,
+          "line_items": null
+        }
+      },
+      "display_overrides": {},
+      "expected": {
+        "currency": "mismatch"
+      }
+    },
+    {
+      "id": "12-invoice-value-mismatch",
+      "name": "Invoice arithmetic mismatch",
+      "purpose": "The stated invoice total does not equal the line-item total.",
+      "documents": {
+        "invoice": {
+          "exporter": "Outback Origins Art Co.",
+          "consignee": "Galerie Nordlicht GmbH",
+          "description_of_goods": "Aboriginal acrylic on canvas",
+          "hs_code": "9701.21",
+          "country_of_origin": "Australia",
+          "incoterms": "CIF Hamburg",
+          "port_of_loading": "Sydney, Australia",
+          "port_of_discharge": "Hamburg, Germany",
+          "vessel": "MV Southern Star",
+          "unit_quantity": 3,
+          "number_of_packages": null,
+          "net_weight_kg": null,
+          "gross_weight_kg": null,
+          "total_amount": 25400,
+          "currency": "AUD",
+          "line_items": [
+            {
+              "description": "Desert Waterholes - acrylic on canvas",
+              "quantity": 1,
+              "unit_price": 9500,
+              "amount": 9500
+            },
+            {
+              "description": "Bush Tucker Dreaming - acrylic on canvas",
+              "quantity": 1,
+              "unit_price": 7000,
+              "amount": 7000
+            },
+            {
+              "description": "Seven Sisters Songline - acrylic on canvas",
+              "quantity": 1,
+              "unit_price": 8000,
+              "amount": 8000
+            }
+          ]
+        },
+        "packing_list": {
+          "exporter": "Outback Origins Art Co.",
+          "consignee": "Galerie Nordlicht GmbH",
+          "description_of_goods": "Aboriginal acrylic paintings on canvas",
+          "hs_code": "9701.21",
+          "country_of_origin": "Australia",
+          "incoterms": "CIF Hamburg",
+          "port_of_loading": "Sydney, Australia",
+          "port_of_discharge": "Hamburg, Germany",
+          "vessel": "MV Southern Star",
+          "unit_quantity": 3,
+          "number_of_packages": "1 wooden crate",
+          "net_weight_kg": 12,
+          "gross_weight_kg": 18.5,
+          "total_amount": null,
+          "currency": "AUD",
+          "line_items": null
+        },
+        "bill_of_lading": {
+          "exporter": "Outback Origins Art Co.",
+          "consignee": "Galerie Nordlicht GmbH",
+          "description_of_goods": "Original Aboriginal acrylic paintings on canvas, crated",
+          "hs_code": "9701.21",
+          "country_of_origin": "Australia",
+          "incoterms": null,
+          "port_of_loading": "Sydney, Australia",
+          "port_of_discharge": "Hamburg, Germany",
+          "vessel": "MV Southern Star",
+          "unit_quantity": 3,
+          "number_of_packages": "1 wooden crate",
+          "net_weight_kg": 12,
+          "gross_weight_kg": 18.5,
+          "total_amount": null,
+          "currency": null,
+          "line_items": null
+        }
+      },
+      "display_overrides": {},
+      "expected": {
+        "total_amount": "mismatch"
+      }
+    },
+    {
+      "id": "13-hs-code-mismatch",
+      "name": "HS code mismatch",
+      "purpose": "The packing list uses a different HS subheading.",
+      "documents": {
+        "invoice": {
+          "exporter": "Outback Origins Art Co.",
+          "consignee": "Galerie Nordlicht GmbH",
+          "description_of_goods": "Aboriginal acrylic on canvas",
+          "hs_code": "9701.21",
+          "country_of_origin": "Australia",
+          "incoterms": "CIF Hamburg",
+          "port_of_loading": "Sydney, Australia",
+          "port_of_discharge": "Hamburg, Germany",
+          "vessel": "MV Southern Star",
+          "unit_quantity": 3,
+          "number_of_packages": null,
+          "net_weight_kg": null,
+          "gross_weight_kg": null,
+          "total_amount": 24500,
+          "currency": "AUD",
+          "line_items": [
+            {
+              "description": "Desert Waterholes - acrylic on canvas",
+              "quantity": 1,
+              "unit_price": 9500,
+              "amount": 9500
+            },
+            {
+              "description": "Bush Tucker Dreaming - acrylic on canvas",
+              "quantity": 1,
+              "unit_price": 7000,
+              "amount": 7000
+            },
+            {
+              "description": "Seven Sisters Songline - acrylic on canvas",
+              "quantity": 1,
+              "unit_price": 8000,
+              "amount": 8000
+            }
+          ]
+        },
+        "packing_list": {
+          "exporter": "Outback Origins Art Co.",
+          "consignee": "Galerie Nordlicht GmbH",
+          "description_of_goods": "Aboriginal acrylic paintings on canvas",
+          "hs_code": "9701.20",
+          "country_of_origin": "Australia",
+          "incoterms": "CIF Hamburg",
+          "port_of_loading": "Sydney, Australia",
+          "port_of_discharge": "Hamburg, Germany",
+          "vessel": "MV Southern Star",
+          "unit_quantity": 3,
+          "number_of_packages": "1 wooden crate",
+          "net_weight_kg": 12,
+          "gross_weight_kg": 18.5,
+          "total_amount": null,
+          "currency": "AUD",
+          "line_items": null
+        },
+        "bill_of_lading": {
+          "exporter": "Outback Origins Art Co.",
+          "consignee": "Galerie Nordlicht GmbH",
+          "description_of_goods": "Original Aboriginal acrylic paintings on canvas, crated",
+          "hs_code": "9701.21",
+          "country_of_origin": "Australia",
+          "incoterms": null,
+          "port_of_loading": "Sydney, Australia",
+          "port_of_discharge": "Hamburg, Germany",
+          "vessel": "MV Southern Star",
+          "unit_quantity": 3,
+          "number_of_packages": "1 wooden crate",
+          "net_weight_kg": 12,
+          "gross_weight_kg": 18.5,
+          "total_amount": null,
+          "currency": null,
+          "line_items": null
+        }
+      },
+      "display_overrides": {},
+      "expected": {
+        "hs_code": "review"
+      }
+    },
+    {
+      "id": "14-equivalent-hs-formatting",
+      "name": "Equivalent HS code formatting",
+      "purpose": "The same HS code is printed with and without punctuation.",
+      "documents": {
+        "invoice": {
+          "exporter": "Outback Origins Art Co.",
+          "consignee": "Galerie Nordlicht GmbH",
+          "description_of_goods": "Aboriginal acrylic on canvas",
+          "hs_code": "9701.21",
+          "country_of_origin": "Australia",
+          "incoterms": "CIF Hamburg",
+          "port_of_loading": "Sydney, Australia",
+          "port_of_discharge": "Hamburg, Germany",
+          "vessel": "MV Southern Star",
+          "unit_quantity": 3,
+          "number_of_packages": null,
+          "net_weight_kg": null,
+          "gross_weight_kg": null,
+          "total_amount": 24500,
+          "currency": "AUD",
+          "line_items": [
+            {
+              "description": "Desert Waterholes - acrylic on canvas",
+              "quantity": 1,
+              "unit_price": 9500,
+              "amount": 9500
+            },
+            {
+              "description": "Bush Tucker Dreaming - acrylic on canvas",
+              "quantity": 1,
+              "unit_price": 7000,
+              "amount": 7000
+            },
+            {
+              "description": "Seven Sisters Songline - acrylic on canvas",
+              "quantity": 1,
+              "unit_price": 8000,
+              "amount": 8000
+            }
+          ]
+        },
+        "packing_list": {
+          "exporter": "Outback Origins Art Co.",
+          "consignee": "Galerie Nordlicht GmbH",
+          "description_of_goods": "Aboriginal acrylic paintings on canvas",
+          "hs_code": "970121",
+          "country_of_origin": "Australia",
+          "incoterms": "CIF Hamburg",
+          "port_of_loading": "Sydney, Australia",
+          "port_of_discharge": "Hamburg, Germany",
+          "vessel": "MV Southern Star",
+          "unit_quantity": 3,
+          "number_of_packages": "1 wooden crate",
+          "net_weight_kg": 12,
+          "gross_weight_kg": 18.5,
+          "total_amount": null,
+          "currency": "AUD",
+          "line_items": null
+        },
+        "bill_of_lading": {
+          "exporter": "Outback Origins Art Co.",
+          "consignee": "Galerie Nordlicht GmbH",
+          "description_of_goods": "Original Aboriginal acrylic paintings on canvas, crated",
+          "hs_code": "9701.21",
+          "country_of_origin": "Australia",
+          "incoterms": null,
+          "port_of_loading": "Sydney, Australia",
+          "port_of_discharge": "Hamburg, Germany",
+          "vessel": "MV Southern Star",
+          "unit_quantity": 3,
+          "number_of_packages": "1 wooden crate",
+          "net_weight_kg": 12,
+          "gross_weight_kg": 18.5,
+          "total_amount": null,
+          "currency": null,
+          "line_items": null
+        }
+      },
+      "display_overrides": {},
+      "expected": {}
+    },
+    {
+      "id": "15-missing-exporter",
+      "name": "Missing critical field",
+      "purpose": "The packing list is missing the exporter name.",
+      "documents": {
+        "invoice": {
+          "exporter": "Outback Origins Art Co.",
+          "consignee": "Galerie Nordlicht GmbH",
+          "description_of_goods": "Aboriginal acrylic on canvas",
+          "hs_code": "9701.21",
+          "country_of_origin": "Australia",
+          "incoterms": "CIF Hamburg",
+          "port_of_loading": "Sydney, Australia",
+          "port_of_discharge": "Hamburg, Germany",
+          "vessel": "MV Southern Star",
+          "unit_quantity": 3,
+          "number_of_packages": null,
+          "net_weight_kg": null,
+          "gross_weight_kg": null,
+          "total_amount": 24500,
+          "currency": "AUD",
+          "line_items": [
+            {
+              "description": "Desert Waterholes - acrylic on canvas",
+              "quantity": 1,
+              "unit_price": 9500,
+              "amount": 9500
+            },
+            {
+              "description": "Bush Tucker Dreaming - acrylic on canvas",
+              "quantity": 1,
+              "unit_price": 7000,
+              "amount": 7000
+            },
+            {
+              "description": "Seven Sisters Songline - acrylic on canvas",
+              "quantity": 1,
+              "unit_price": 8000,
+              "amount": 8000
+            }
+          ]
+        },
+        "packing_list": {
+          "exporter": null,
+          "consignee": "Galerie Nordlicht GmbH",
+          "description_of_goods": "Aboriginal acrylic paintings on canvas",
+          "hs_code": "9701.21",
+          "country_of_origin": "Australia",
+          "incoterms": "CIF Hamburg",
+          "port_of_loading": "Sydney, Australia",
+          "port_of_discharge": "Hamburg, Germany",
+          "vessel": "MV Southern Star",
+          "unit_quantity": 3,
+          "number_of_packages": "1 wooden crate",
+          "net_weight_kg": 12,
+          "gross_weight_kg": 18.5,
+          "total_amount": null,
+          "currency": "AUD",
+          "line_items": null
+        },
+        "bill_of_lading": {
+          "exporter": "Outback Origins Art Co.",
+          "consignee": "Galerie Nordlicht GmbH",
+          "description_of_goods": "Original Aboriginal acrylic paintings on canvas, crated",
+          "hs_code": "9701.21",
+          "country_of_origin": "Australia",
+          "incoterms": null,
+          "port_of_loading": "Sydney, Australia",
+          "port_of_discharge": "Hamburg, Germany",
+          "vessel": "MV Southern Star",
+          "unit_quantity": 3,
+          "number_of_packages": "1 wooden crate",
+          "net_weight_kg": 12,
+          "gross_weight_kg": 18.5,
+          "total_amount": null,
+          "currency": null,
+          "line_items": null
+        }
+      },
+      "display_overrides": {},
+      "expected": {
+        "exporter": "review"
+      }
+    }
+  ]
+}

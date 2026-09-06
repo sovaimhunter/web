@@ -22,10 +22,13 @@ import {
 } from "@/components/ui/card";
 import { Header } from "@/components/layout/header";
 import { Main } from "@/components/layout/main";
+import { WorkflowSteps } from "@/components/workflow-steps";
 import {
   DOC_KEYS,
   DOC_NAMES,
   MAX_UPLOAD_TOTAL_BYTES,
+  type CheckErrorResponse,
+  type CheckFailure,
   type CheckResult,
   type DocKey,
 } from "@/lib/types";
@@ -55,22 +58,51 @@ export function DocumentsClient({ shipmentId }: { shipmentId: string }) {
     {},
   );
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [failures, setFailures] = useState<CheckFailure[]>([]);
 
   const readyCount = DOC_KEYS.filter((key) => files[key]).length;
 
+  const setFileFailure = useCallback((failure: CheckFailure) => {
+    setFailures((previous) => [
+      ...previous.filter((item) => item.document !== failure.document),
+      failure,
+    ]);
+  }, []);
+
   const acceptFile = useCallback((key: DocKey, file: File | undefined) => {
-    setError(null);
     if (!file) return;
+    setFailures((previous) =>
+      previous.filter(
+        (failure) => failure.document !== key && failure.document !== undefined,
+      ),
+    );
     const isPdf =
       file.type === "application/pdf" ||
       file.name.toLowerCase().endsWith(".pdf");
     if (!isPdf) {
-      setError(`${DOC_NAMES[key]}: please choose a PDF file.`);
+      setFileFailure({
+        code: "INVALID_FILE_TYPE",
+        stage: "upload",
+        document: key,
+        message: `${DOC_NAMES[key]} must be a PDF file.`,
+        action: "Choose a PDF file instead.",
+        retryable: false,
+      });
+      return;
+    }
+    if (file.size === 0) {
+      setFileFailure({
+        code: "EMPTY_FILE",
+        stage: "upload",
+        document: key,
+        message: `${DOC_NAMES[key]} is empty.`,
+        action: "Choose a non-empty PDF.",
+        retryable: false,
+      });
       return;
     }
     setFiles((prev) => ({ ...prev, [key]: file }));
-  }, []);
+  }, [setFileFailure]);
 
   const removeFile = useCallback((key: DocKey) => {
     setFiles((prev) => {
@@ -78,21 +110,36 @@ export function DocumentsClient({ shipmentId }: { shipmentId: string }) {
       delete next[key];
       return next;
     });
+    setFailures((previous) =>
+      previous.filter(
+        (failure) => failure.document !== key && failure.document !== undefined,
+      ),
+    );
   }, []);
 
   const handleDrop = useCallback(
     (key: DocKey, event: React.DragEvent<HTMLDivElement>) => {
       event.preventDefault();
+      if (loading) return;
       setDragging((prev) => ({ ...prev, [key]: false }));
       acceptFile(key, event.dataTransfer.files[0]);
     },
-    [acceptFile],
+    [acceptFile, loading],
   );
 
   const handleCompare = async () => {
     const missing = DOC_KEYS.filter((key) => !files[key]);
     if (missing.length > 0) {
-      setError(`Please add: ${missing.map((k) => DOC_NAMES[k]).join(", ")}.`);
+      setFailures(
+        missing.map((key) => ({
+          code: "MISSING_DOCUMENT",
+          stage: "upload",
+          document: key,
+          message: `${DOC_NAMES[key]} is missing.`,
+          action: `Add the ${DOC_NAMES[key]} before running the check.`,
+          retryable: true,
+        })),
+      );
       return;
     }
 
@@ -101,16 +148,24 @@ export function DocumentsClient({ shipmentId }: { shipmentId: string }) {
       0,
     );
     if (totalBytes > MAX_UPLOAD_TOTAL_BYTES) {
-      setError(
-        `The three PDFs total ${formatSize(totalBytes)}, over the ${formatSize(
-          MAX_UPLOAD_TOTAL_BYTES,
-        )} upload limit. Please use smaller or compressed PDFs.`,
-      );
+      setFailures([
+        {
+          code: "UPLOAD_TOO_LARGE",
+          stage: "upload",
+          message: `The three PDFs total ${formatSize(totalBytes)}, over the ${formatSize(
+            MAX_UPLOAD_TOTAL_BYTES,
+          )} upload limit.`,
+          action: "Compress the PDFs or replace them with smaller files.",
+          retryable: false,
+        },
+      ]);
       return;
     }
 
     setLoading(true);
-    setError(null);
+    setFailures([]);
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 120_000);
     try {
       const formData = new FormData();
       for (const key of DOC_KEYS) formData.append(key, files[key]!);
@@ -118,18 +173,63 @@ export function DocumentsClient({ shipmentId }: { shipmentId: string }) {
       const response = await fetch("/api/check", {
         method: "POST",
         body: formData,
+        signal: controller.signal,
       });
 
       // Platform-level errors (e.g. a 413 from Vercel's edge) are not JSON,
       // so fall back to a readable message instead of a JSON parse error.
-      const data = await response.json().catch(() => null);
+      const data = (await response.json().catch(() => null)) as
+        | CheckResult
+        | CheckErrorResponse
+        | null;
       if (!response.ok) {
-        throw new Error(
-          data?.error ??
-            (response.status === 413
-              ? "The uploaded PDFs are too large. Please use smaller files."
-              : `The consistency check failed (HTTP ${response.status}).`),
+        const responseFailures =
+          data && "failures" in data ? data.failures : undefined;
+        const responseMessage =
+          data && "error" in data ? data.error : undefined;
+        const nextFailures: CheckFailure[] = responseFailures?.length
+          ? responseFailures
+          : [
+              {
+                code:
+                  response.status === 413
+                    ? "UPLOAD_TOO_LARGE"
+                    : "CHECK_FAILED",
+                stage: response.status === 413 ? "upload" : "comparison",
+                message:
+                  responseMessage ??
+                  (response.status === 413
+                    ? "The uploaded PDFs are too large."
+                    : `The document check failed (HTTP ${response.status}).`),
+                action:
+                  response.status === 413
+                    ? "Compress the PDFs or replace them with smaller files."
+                    : "Try the check again.",
+                retryable: response.status !== 413,
+              },
+            ];
+        const checkReachedResults = nextFailures.some(
+          (failure) =>
+            failure.stage === "extraction" || failure.stage === "comparison",
         );
+        if (checkReachedResults) {
+          saveResult(shipmentId, {
+            outcome: "failed",
+            files: Object.fromEntries(
+              DOC_KEYS.map((key) => [key, files[key]!.name]),
+            ),
+            failures: nextFailures,
+          });
+          updateShipment(shipmentId, {
+            status: "check_failed",
+            mustFixCount: 0,
+            reviewCount: 0,
+          });
+          router.push(`/shipments/${shipmentId}/results`);
+        } else {
+          setFailures(nextFailures);
+        }
+        return;
       }
       if (!data) {
         throw new Error("The server returned an unreadable response.");
@@ -137,23 +237,33 @@ export function DocumentsClient({ shipmentId }: { shipmentId: string }) {
 
       const result = data as CheckResult;
       saveResult(shipmentId, result);
-      const errors = result.issues.filter(
-        (issue) => issue.severity === "error",
+      const mustFix = result.issues.filter(
+        (issue) => issue.status === "must_fix",
       ).length;
-      const warnings = result.issues.filter(
-        (issue) => issue.severity === "warning",
+      const reviews = result.issues.filter(
+        (issue) => issue.status === "review",
       ).length;
       updateShipment(shipmentId, {
         status: "checked",
-        mismatchCount: errors,
-        reviewCount: warnings,
+        mustFixCount: mustFix,
+        reviewCount: reviews,
       });
       router.push(`/shipments/${shipmentId}/results`);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "The consistency check failed.",
-      );
+      const timedOut = err instanceof DOMException && err.name === "AbortError";
+      setFailures([
+        {
+          code: timedOut ? "PROVIDER_TIMEOUT" : "NETWORK_ERROR",
+          stage: "extraction",
+          message: timedOut
+            ? "The document check took too long."
+            : "The document check could not reach the server.",
+          action: "Your selected files are still here. Try the check again.",
+          retryable: true,
+        },
+      ]);
     } finally {
+      window.clearTimeout(timeout);
       setLoading(false);
     }
   };
@@ -181,46 +291,72 @@ export function DocumentsClient({ shipmentId }: { shipmentId: string }) {
   return (
     <>
       <Header
-        title={shipment.name}
-        subtitle="Upload documents · Step 2 of 4"
+        title={loading ? "Checking documents" : "Upload documents"}
+        subtitle={`${shipment.name} · Step ${loading ? "3" : "2"} of 4`}
       />
       <Main className="mx-auto w-full max-w-4xl">
         <Button asChild variant="ghost" className="mb-4 -ml-2">
           <Link href="/">
             <ArrowLeft />
-            All shipments
+            Back to shipments
           </Link>
         </Button>
 
-        {error && (
+        <WorkflowSteps currentStep={loading ? 3 : 2} />
+
+        {failures.length > 0 && (
           <Alert variant="destructive" className="mb-6">
             <AlertCircle />
-            <AlertTitle>Something is off</AlertTitle>
-            <AlertDescription>{error}</AlertDescription>
+            <AlertTitle>Check the selected documents</AlertTitle>
+            <AlertDescription>
+              <ul className="mt-1 space-y-2">
+                {failures.map((failure, index) => (
+                  <li
+                    key={`${failure.code}-${failure.document ?? "check"}-${index}`}
+                  >
+                    <span className="font-medium">{failure.message}</span>{" "}
+                    <span>{failure.action}</span>
+                  </li>
+                ))}
+              </ul>
+            </AlertDescription>
           </Alert>
         )}
 
         <div className="grid gap-4 sm:grid-cols-3">
           {DOC_KEYS.map((key) => {
             const file = files[key];
+            const fileFailure = failures.find(
+              (failure) => failure.document === key,
+            );
             return (
               <Card
                 key={key}
-                className={`relative cursor-pointer transition-colors ${
-                  dragging[key]
+                aria-disabled={loading}
+                className={`relative transition-colors ${
+                  loading ? "cursor-wait opacity-75" : "cursor-pointer"
+                } ${
+                  fileFailure
+                    ? "border-red-300 bg-red-50/60 dark:bg-red-950/20"
+                    : dragging[key]
                     ? "border-primary bg-primary/5"
                     : file
                       ? "border-green-300 bg-green-50/60 dark:bg-green-950/20"
                       : "hover:bg-muted/50"
                 }`}
-                onClick={() => inputRefs.current[key]?.click()}
+                onClick={() => {
+                  if (!loading) inputRefs.current[key]?.click();
+                }}
                 onDragOver={(event) => {
                   event.preventDefault();
+                  if (loading) return;
                   setDragging((prev) => ({ ...prev, [key]: true }));
                 }}
-                onDragLeave={() =>
-                  setDragging((prev) => ({ ...prev, [key]: false }))
-                }
+                onDragLeave={() => {
+                  if (!loading) {
+                    setDragging((prev) => ({ ...prev, [key]: false }));
+                  }
+                }}
                 onDrop={(event) => handleDrop(key, event)}
               >
                 {file && (
@@ -230,6 +366,7 @@ export function DocumentsClient({ shipmentId }: { shipmentId: string }) {
                     size="icon-sm"
                     className="absolute right-2 top-2 z-10 text-muted-foreground hover:text-destructive"
                     aria-label={`Remove ${DOC_NAMES[key]}`}
+                    disabled={loading}
                     onClick={(event) => {
                       event.stopPropagation();
                       removeFile(key);
@@ -241,7 +378,9 @@ export function DocumentsClient({ shipmentId }: { shipmentId: string }) {
                 <CardHeader>
                   <CardTitle className="text-sm">{DOC_NAMES[key]}</CardTitle>
                   <CardDescription className="text-xs">
-                    {file
+                    {fileFailure
+                      ? "Needs attention · click to replace"
+                      : file
                       ? "Ready · click to replace"
                       : "Drag & drop or click to browse"}
                   </CardDescription>
@@ -249,7 +388,11 @@ export function DocumentsClient({ shipmentId }: { shipmentId: string }) {
                 <CardContent className="flex flex-col items-center gap-3 px-4 pb-6 pt-1 text-center">
                   {file ? (
                     <>
-                      <CheckCircle2 className="size-8 text-green-600" />
+                      {fileFailure ? (
+                        <AlertCircle className="size-8 text-red-600" />
+                      ) : (
+                        <CheckCircle2 className="size-8 text-green-600" />
+                      )}
                       <div className="w-full min-w-0">
                         <p className="truncate text-sm font-medium">
                           {file.name}
@@ -257,6 +400,11 @@ export function DocumentsClient({ shipmentId }: { shipmentId: string }) {
                         <p className="text-xs text-muted-foreground">
                           {formatSize(file.size)}
                         </p>
+                        {fileFailure && (
+                          <p className="mt-2 text-xs text-red-700 dark:text-red-300">
+                            {fileFailure.message}
+                          </p>
+                        )}
                       </div>
                     </>
                   ) : (
@@ -278,6 +426,7 @@ export function DocumentsClient({ shipmentId }: { shipmentId: string }) {
                   type="file"
                   accept="application/pdf,.pdf"
                   className="hidden"
+                  disabled={loading}
                   onChange={(event) =>
                     acceptFile(key, event.target.files?.[0])
                   }
@@ -290,9 +439,21 @@ export function DocumentsClient({ shipmentId }: { shipmentId: string }) {
         <div className="mt-5 flex items-center gap-2 text-xs text-muted-foreground">
           {readyCount === 3 ? (
             <>
-              <CheckCircle2 className="size-4 text-green-600" />
-              <span className="font-medium text-green-600">
-                All 3 PDFs ready
+              {failures.some((failure) => failure.document) ? (
+                <AlertCircle className="size-4 text-amber-600" />
+              ) : (
+                <CheckCircle2 className="size-4 text-green-600" />
+              )}
+              <span
+                className={
+                  failures.some((failure) => failure.document)
+                    ? "font-medium text-amber-700"
+                    : "font-medium text-green-600"
+                }
+              >
+                {failures.some((failure) => failure.document)
+                  ? "3 PDFs selected · review the issue above"
+                  : "All 3 PDFs ready"}
               </span>
             </>
           ) : (
@@ -315,14 +476,22 @@ export function DocumentsClient({ shipmentId }: { shipmentId: string }) {
             {loading ? (
               <>
                 <Loader2 className="animate-spin" />
-                Extracting & comparing…
+                Checking documents…
               </>
+            ) : failures.some(
+                (failure) =>
+                  failure.stage === "extraction" ||
+                  failure.stage === "comparison",
+              ) ? (
+              "Try check again"
             ) : (
               "Check documents"
             )}
           </Button>
           <p className="text-xs text-muted-foreground">
-            AI extraction takes a few seconds · nothing is saved on the server.
+            {failures.length > 0
+              ? "Your selected files are kept here so you can replace one or try again."
+              : "AI extraction takes a few seconds · nothing is saved on the server."}
           </p>
         </div>
       </Main>

@@ -10,7 +10,7 @@ import {
   ChevronRight,
   ChevronUp,
   FileText,
-  RefreshCcw,
+  UploadCloud,
   XCircle,
 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -40,23 +40,27 @@ import {
 import { DiffText } from "@/components/diff-text";
 import { Header } from "@/components/layout/header";
 import { Main } from "@/components/layout/main";
+import { WorkflowSteps } from "@/components/workflow-steps";
 import {
   DOC_KEYS,
   DOC_NAMES,
+  type CheckFailure,
+  type CheckStatus,
   type DocKey,
+  type FailedCheckResult,
   type FieldRow,
-  type FieldStatus,
 } from "@/lib/types";
+import { CHECK_STATUS_LABEL } from "@/lib/check-status";
 import { loadResult } from "@/lib/results";
 
 const emptySubscribe = () => () => {};
 
 const getServerSnapshot = () => null;
 
-const STATUS_PRIORITY: Record<FieldStatus, number> = {
-  mismatch: 0,
+const STATUS_PRIORITY: Record<CheckStatus, number> = {
+  must_fix: 0,
   review: 1,
-  match: 2,
+  passed: 2,
 };
 
 const DISPLAY_LABELS: Record<string, string> = {
@@ -212,6 +216,158 @@ function DocChip({ label, filename }: { label: string; filename?: string }) {
   );
 }
 
+function failureHeading(failure: CheckFailure): string {
+  if (failure.document) {
+    return `${DOC_NAMES[failure.document]} could not be checked`;
+  }
+  return failure.stage === "comparison"
+    ? "Document comparison could not be completed"
+    : "Document extraction could not be completed";
+}
+
+function FailedCheckResults({
+  shipmentId,
+  result,
+}: {
+  shipmentId: string;
+  result: FailedCheckResult;
+}) {
+  return (
+    <>
+      <Header title="Results" subtitle="Step 4 of 4 · Check incomplete" />
+      <Main className="mx-auto w-full max-w-6xl">
+        <WorkflowSteps currentStep={4} />
+
+        <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">
+              Document Check Results
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              The check stopped before all three documents could be compared.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button asChild>
+              <Link href={`/shipments/${shipmentId}/documents`}>
+                <UploadCloud />
+                Return to upload
+              </Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/">
+                <ArrowLeft />
+                Back to shipments
+              </Link>
+            </Button>
+          </div>
+        </div>
+
+        <section className="mb-8 rounded-xl border border-red-200 bg-card p-5 shadow-sm dark:border-red-900/60">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-red-50 text-red-600 dark:bg-red-950">
+                <XCircle className="size-5" />
+              </span>
+              <div>
+                <p className="text-base font-semibold">Check incomplete</p>
+                <p className="text-sm text-muted-foreground">
+                  Resolve the item{result.failures.length === 1 ? "" : "s"}
+                  {" "}below before relying on the document comparison.
+                </p>
+              </div>
+            </div>
+            <Badge variant="destructive">Must Fix</Badge>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2 border-t pt-4">
+            {DOC_KEYS.map((key) => (
+              <DocChip
+                key={key}
+                label={DOC_NAMES[key]}
+                filename={result.files[key]}
+              />
+            ))}
+          </div>
+        </section>
+
+        <section aria-labelledby="extraction-failures-heading" className="mb-8">
+          <div className="mb-3">
+            <h2
+              id="extraction-failures-heading"
+              className="text-lg font-semibold"
+            >
+              What stopped the check
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Each item identifies the affected document and the next action.
+            </p>
+          </div>
+          <div className="space-y-4">
+            {result.failures.map((failure, index) => (
+              <article
+                key={`${failure.code}-${failure.document ?? "check"}-${index}`}
+                className="overflow-hidden rounded-xl border border-red-200 bg-card shadow-sm dark:border-red-900/60"
+              >
+                <div className="flex flex-col gap-3 border-b bg-red-50/30 px-5 py-4 sm:flex-row sm:items-start sm:justify-between dark:bg-red-950/10">
+                  <div className="flex items-start gap-3">
+                    <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-red-50 text-red-600 dark:bg-red-950">
+                      <XCircle className="size-4" />
+                    </span>
+                    <div>
+                      <h3 className="font-semibold">
+                        {failureHeading(failure)}
+                      </h3>
+                      <p className="mt-0.5 text-sm text-muted-foreground">
+                        {failure.message}
+                      </p>
+                    </div>
+                  </div>
+                  <Badge variant="destructive">Must Fix</Badge>
+                </div>
+                <div className="p-5">
+                  {failure.document && (
+                    <div className="mb-5 rounded-lg border bg-muted/20 px-3.5 py-3">
+                      <p className="text-xs font-medium text-muted-foreground">
+                        Affected document
+                      </p>
+                      <p className="mt-1 text-sm font-medium">
+                        {DOC_NAMES[failure.document]}
+                        {result.files[failure.document]
+                          ? ` · ${result.files[failure.document]}`
+                          : ""}
+                      </p>
+                    </div>
+                  )}
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Why this matters
+                      </p>
+                      <p className="mt-1.5 text-sm leading-6">
+                        TradeLynk needs readable structured fields from all
+                        three documents before it can compare the shipment
+                        reliably.
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        What to do
+                      </p>
+                      <p className="mt-1.5 text-sm leading-6">
+                        {failure.action}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      </Main>
+    </>
+  );
+}
+
 export function ResultsClient({ shipmentId }: { shipmentId: string }) {
   const result = useSyncExternalStore(
     emptySubscribe,
@@ -236,7 +392,7 @@ export function ResultsClient({ shipmentId }: { shipmentId: string }) {
             <CardContent>
               <Button asChild>
                 <Link href={`/shipments/${shipmentId}/documents`}>
-                  <ArrowLeft />
+                  <UploadCloud />
                   Upload documents
                 </Link>
               </Button>
@@ -247,23 +403,27 @@ export function ResultsClient({ shipmentId }: { shipmentId: string }) {
     );
   }
 
+  if (result.outcome === "failed") {
+    return <FailedCheckResults shipmentId={shipmentId} result={result} />;
+  }
+
   const noFields = result.rows.length === 0;
-  const statusOf = (row: FieldRow): FieldStatus => {
+  const statusOf = (row: FieldRow): CheckStatus => {
     if (row.status) return row.status;
     const issue = result.issues.find((i) => i.field === row.field);
-    if (issue) return issue.severity === "error" ? "mismatch" : "review";
-    return row.consistent ? "match" : "review";
+    if (issue) return issue.status;
+    return row.consistent ? "passed" : "review";
   };
-  const matchCount = result.rows.filter(
-    (row) => statusOf(row) === "match",
+  const passedCount = result.rows.filter(
+    (row) => statusOf(row) === "passed",
   ).length;
   const reviewCount = result.rows.filter(
     (row) => statusOf(row) === "review",
   ).length;
-  const mismatchCount = result.rows.filter(
-    (row) => statusOf(row) === "mismatch",
+  const mustFixCount = result.rows.filter(
+    (row) => statusOf(row) === "must_fix",
   ).length;
-  const problemCount = mismatchCount + reviewCount;
+  const problemCount = mustFixCount + reviewCount;
   const issueMessageByField = new Map(
     result.issues.map((issue) => [issue.field, issue.message]),
   );
@@ -275,39 +435,41 @@ export function ResultsClient({ shipmentId }: { shipmentId: string }) {
   );
   const visibleRows = showMatched
     ? sortedRows
-    : sortedRows.filter((row) => statusOf(row) !== "match");
+    : sortedRows.filter((row) => statusOf(row) !== "passed");
   const problemRows = sortedRows.filter(
-    (row) => statusOf(row) !== "match",
+    (row) => statusOf(row) !== "passed",
   );
-  const matchedRows = sortedRows.filter((row) => statusOf(row) === "match");
+  const passedRows = sortedRows.filter((row) => statusOf(row) === "passed");
 
   const problemBreakdown = [
-    mismatchCount > 0
-      ? `${mismatchCount} must be corrected`
+    mustFixCount > 0
+      ? `${mustFixCount} Must Fix`
       : null,
     reviewCount > 0
-      ? `${reviewCount} ${reviewCount === 1 ? "requires" : "require"} review`
+      ? `${reviewCount} Review`
       : null,
   ]
     .filter(Boolean)
     .join(" · ");
 
   const statusTitle = noFields
-    ? "No fields extracted"
+    ? "Check incomplete"
     : problemCount > 0
       ? `${problemCount} issue${problemCount === 1 ? "" : "s"} detected`
-        : "All matched";
+        : "Passed";
 
   const statusDescription = noFields
-    ? "These documents look like blank templates — no values were found to compare."
+    ? "No structured fields were available to compare."
     : problemCount > 0
       ? problemBreakdown
-        : "All fields that are present on the documents match.";
+        : "All compared fields passed.";
 
   return (
     <>
-      <Header title="Results" subtitle="View results · Step 4 of 4" />
+      <Header title="Results" subtitle="Step 4 of 4 · Check complete" />
       <Main className="mx-auto w-full max-w-6xl">
+        <WorkflowSteps currentStep={4} />
+
         <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">
@@ -320,14 +482,14 @@ export function ResultsClient({ shipmentId }: { shipmentId: string }) {
           <div className="flex gap-2">
             <Button asChild variant="outline">
               <Link href={`/shipments/${shipmentId}/documents`}>
-                <RefreshCcw />
-                Re-check
+                <UploadCloud />
+                Upload new documents
               </Link>
             </Button>
             <Button asChild variant="outline">
               <Link href="/">
                 <ArrowLeft />
-                All shipments
+                Back to shipments
               </Link>
             </Button>
           </div>
@@ -337,7 +499,7 @@ export function ResultsClient({ shipmentId }: { shipmentId: string }) {
           className={`mb-8 rounded-xl border bg-card p-5 shadow-sm ${
             noFields
               ? "border-amber-200"
-              : mismatchCount > 0
+              : mustFixCount > 0
                 ? "border-red-100 dark:border-red-900/40"
                 : reviewCount > 0
                   ? "border-amber-200 dark:border-amber-900/40"
@@ -350,14 +512,14 @@ export function ResultsClient({ shipmentId }: { shipmentId: string }) {
                 className={`flex size-11 shrink-0 items-center justify-center rounded-full ${
                   noFields
                     ? "bg-amber-50 text-amber-500 dark:bg-amber-950"
-                    : mismatchCount > 0
+                    : mustFixCount > 0
                       ? "bg-red-50 text-red-500 dark:bg-red-950"
                       : reviewCount > 0
                         ? "bg-amber-50 text-amber-500 dark:bg-amber-950"
-                        : "bg-muted text-muted-foreground"
+                        : "bg-green-50 text-green-600 dark:bg-green-950"
                 }`}
               >
-                {mismatchCount > 0 || noFields ? (
+                {mustFixCount > 0 || noFields ? (
                   <AlertCircle className="size-5" />
                 ) : reviewCount > 0 ? (
                   <AlertCircle className="size-5" />
@@ -374,22 +536,22 @@ export function ResultsClient({ shipmentId }: { shipmentId: string }) {
             </div>
             <div className="flex flex-wrap gap-2">
               <Badge variant="secondary">3 documents</Badge>
-              {matchCount > 0 && (
+              {passedCount > 0 && (
                 <Badge
                   variant="secondary"
-                  className="bg-muted text-muted-foreground"
+                  className="bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300"
                 >
-                  {matchCount} matched
+                  {passedCount} Passed
                 </Badge>
               )}
               {reviewCount > 0 && (
                 <Badge className="bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-300">
-                  {reviewCount} require{reviewCount === 1 ? "s" : ""} review
+                  {reviewCount} Review
                 </Badge>
               )}
-              {mismatchCount > 0 && (
+              {mustFixCount > 0 && (
                 <Badge className="bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-300">
-                  {mismatchCount} mismatch{mismatchCount === 1 ? "" : "es"}
+                  {mustFixCount} Must Fix
                 </Badge>
               )}
             </div>
@@ -413,19 +575,19 @@ export function ResultsClient({ shipmentId }: { shipmentId: string }) {
             className="mb-8 border-amber-200 bg-amber-50/50 dark:bg-amber-950/20"
           >
             <AlertCircle className="text-amber-500" />
-            <AlertTitle>Check the uploaded files</AlertTitle>
+            <AlertTitle>No structured fields available</AlertTitle>
             <AlertDescription>
-              Make sure you upload the filled PDFs from{" "}
-              <code>Document/filled/</code>, not the empty forms in{" "}
-              <code>Document/</code>.
+              This does not prove the PDFs are blank. Text recognition or AI
+              extraction may have failed. Return to Upload documents, confirm
+              each file is readable, and run the check again.
             </AlertDescription>
           </Alert>
-        ) : mismatchCount === 0 && reviewCount === 0 ? (
-          <Alert className="mb-8 border-border bg-muted/40">
-            <CheckCircle2 className="text-muted-foreground" />
-            <AlertTitle>All fields matched</AlertTitle>
+        ) : mustFixCount === 0 && reviewCount === 0 ? (
+          <Alert className="mb-8 border-green-200 bg-green-50/40 dark:border-green-900/60 dark:bg-green-950/10">
+            <CheckCircle2 className="text-green-600" />
+            <AlertTitle>Passed</AlertTitle>
             <AlertDescription>
-              All fields that are present on the documents match.
+              All compared fields passed the consistency check.
             </AlertDescription>
           </Alert>
         ) : null}
@@ -450,16 +612,20 @@ export function ResultsClient({ shipmentId }: { shipmentId: string }) {
                     const presentKeys = DOC_KEYS.filter((key) =>
                       isPresent(row.vals[key]),
                     );
+                    const issueKeys = DOC_KEYS.filter(
+                      (key) =>
+                        isPresent(row.vals[key]) || row.outliers.includes(key),
+                    );
                     const isTie =
                       presentKeys.length > 1 &&
                       row.outliers.length === presentKeys.length;
-                    const isMismatch = status === "mismatch";
+                    const isMustFix = status === "must_fix";
 
                     return (
                       <article
                         key={row.key}
                         className={`overflow-hidden rounded-xl border bg-card shadow-sm ${
-                          isMismatch
+                          isMustFix
                             ? "border-red-200 dark:border-red-900/60"
                             : "border-amber-200 dark:border-amber-900/60"
                         }`}
@@ -468,12 +634,12 @@ export function ResultsClient({ shipmentId }: { shipmentId: string }) {
                           <div className="flex items-start gap-3">
                             <span
                               className={`mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full ${
-                                isMismatch
+                                isMustFix
                                   ? "bg-red-50 text-red-600 dark:bg-red-950"
                                   : "bg-amber-50 text-amber-600 dark:bg-amber-950"
                               }`}
                             >
-                              {isMismatch ? (
+                              {isMustFix ? (
                                 <XCircle className="size-4" />
                               ) : (
                                 <AlertCircle className="size-4" />
@@ -481,8 +647,7 @@ export function ResultsClient({ shipmentId }: { shipmentId: string }) {
                             </span>
                             <div>
                               <h3 className="font-semibold">
-                                {displayLabel}{" "}
-                                {isMismatch ? "mismatch" : "requires review"}
+                                {displayLabel}
                               </h3>
                               {issueMessageByField.get(row.field) && (
                                 <p className="mt-0.5 text-sm text-muted-foreground">
@@ -493,34 +658,53 @@ export function ResultsClient({ shipmentId }: { shipmentId: string }) {
                           </div>
                           <Badge
                             className={
-                              isMismatch
+                              isMustFix
                                 ? "w-fit bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300"
                                 : "w-fit bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
                             }
                           >
-                            {isMismatch ? "Must fix" : "Review"}
+                            {CHECK_STATUS_LABEL[status]}
                           </Badge>
                         </div>
 
                         <div className="p-5">
                           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                            {presentKeys.map((key) => (
-                              <div
-                                key={key}
-                                className="rounded-lg border bg-muted/20 px-3.5 py-3"
-                              >
-                                <p className="text-xs font-medium text-muted-foreground">
-                                  {DOC_NAMES[key]}
-                                </p>
-                                <p className="mt-1 break-words text-sm font-medium">
-                                  {formatIssueValue(
-                                    row,
-                                    key,
-                                    result.documents[key].currency,
-                                  )}
-                                </p>
-                              </div>
-                            ))}
+                            {issueKeys.map((key) => {
+                              const missing = !isPresent(row.vals[key]);
+                              return (
+                                <div
+                                  key={key}
+                                  className={`rounded-lg border px-3.5 py-3 ${
+                                    missing
+                                      ? isMustFix
+                                        ? "border-red-200 bg-red-50/40 dark:border-red-900/60 dark:bg-red-950/10"
+                                        : "border-amber-200 bg-amber-50/40 dark:border-amber-900/60 dark:bg-amber-950/10"
+                                      : "bg-muted/20"
+                                  }`}
+                                >
+                                  <p className="text-xs font-medium text-muted-foreground">
+                                    {DOC_NAMES[key]}
+                                  </p>
+                                  <p
+                                    className={`mt-1 break-words text-sm font-medium ${
+                                      missing
+                                        ? isMustFix
+                                          ? "text-red-700 dark:text-red-300"
+                                          : "text-amber-700 dark:text-amber-300"
+                                        : ""
+                                    }`}
+                                  >
+                                    {missing
+                                      ? "Missing"
+                                      : formatIssueValue(
+                                          row,
+                                          key,
+                                          result.documents[key].currency,
+                                        )}
+                                  </p>
+                                </div>
+                              );
+                            })}
                           </div>
 
                           {isTie && (
@@ -556,26 +740,24 @@ export function ResultsClient({ shipmentId }: { shipmentId: string }) {
               </section>
             )}
 
-            {matchedRows.length > 0 && (
-              <section aria-labelledby="matched-heading" className="mb-8">
+            {passedRows.length > 0 && (
+              <section aria-labelledby="passed-heading" className="mb-8">
                 <div className="mb-3">
-                  <h2 id="matched-heading" className="text-lg font-semibold">
-                    Matched checks
+                  <h2 id="passed-heading" className="text-lg font-semibold">
+                    Passed checks
                   </h2>
                   <p className="mt-1 text-sm text-muted-foreground">
                     These details were consistent wherever they appeared.
                   </p>
                 </div>
                 <div className="grid gap-2 rounded-xl border bg-card p-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {matchedRows.map((row) => (
+                  {passedRows.map((row) => (
                     <div
                       key={row.key}
                       className="flex items-center gap-2 rounded-lg bg-muted/30 px-3 py-2.5 text-sm"
                     >
                       <CheckCircle2 className="size-4 shrink-0 text-green-600" />
-                      <span>
-                        {DISPLAY_LABELS[row.key] ?? row.field} matched
-                      </span>
+                      <span>{DISPLAY_LABELS[row.key] ?? row.field}</span>
                     </div>
                   ))}
                 </div>
@@ -625,7 +807,7 @@ export function ResultsClient({ shipmentId }: { shipmentId: string }) {
                         // flagged as an outlier, so there's no "correct" side —
                         // just disagreement to resolve, not a confirmed error.
                         const isTie =
-                          status !== "match" &&
+                          status !== "passed" &&
                           presentKeys.length > 1 &&
                           row.outliers.length === presentKeys.length;
 
@@ -633,7 +815,7 @@ export function ResultsClient({ shipmentId }: { shipmentId: string }) {
                           <TableRow
                             key={row.key}
                             className={
-                              status === "mismatch"
+                              status === "must_fix"
                                 ? "bg-red-50/25 dark:bg-red-950/10"
                                 : status === "review"
                                   ? "bg-amber-50/30 dark:bg-amber-950/10"
@@ -642,7 +824,7 @@ export function ResultsClient({ shipmentId }: { shipmentId: string }) {
                           >
                             <TableCell className="whitespace-nowrap align-top font-medium">
                               <span className="flex items-center gap-1.5">
-                                {status === "mismatch" ? (
+                                {status === "must_fix" ? (
                                   <XCircle className="size-4 shrink-0 text-red-500" />
                                 ) : status === "review" ? (
                                   <AlertCircle className="size-4 shrink-0 text-amber-500" />
@@ -652,26 +834,21 @@ export function ResultsClient({ shipmentId }: { shipmentId: string }) {
                                 {row.field}
                                 <span
                                   className={`text-xs font-semibold ${
-                                    status === "mismatch"
+                                    status === "must_fix"
                                       ? "text-red-500"
                                       : status === "review"
                                         ? "text-amber-500"
                                         : "text-muted-foreground"
                                   }`}
                                 >
-                                  {status === "mismatch"
-                                    ? "mismatch"
-                                    : status === "review"
-                                      ? "review"
-                                      : "match"}
+                                  {CHECK_STATUS_LABEL[status]}
                                 </span>
                               </span>
                             </TableCell>
                             {DOC_KEYS.map((key) => {
                               const value = row.vals[key];
                               const present = isPresent(value);
-                              const isOutlier =
-                                present && row.outliers?.includes(key);
+                              const isOutlier = row.outliers?.includes(key);
                               const tone =
                                 status === "review" ? "amber" : "red";
                               const toneText =
@@ -687,10 +864,28 @@ export function ResultsClient({ shipmentId }: { shipmentId: string }) {
                                 typeof value === "string" &&
                                 typeof row.reference === "string";
 
-                              let cellContent: React.ReactNode = formatValue(
-                                value,
-                              );
-                              if (status !== "match" && present) {
+                              let cellContent: React.ReactNode = isOutlier && !present
+                                ? (
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <span
+                                          tabIndex={0}
+                                          className={`rounded-sm px-1 py-0.5 font-semibold outline-none ${toneBg} ${toneText} focus-visible:ring-2 focus-visible:ring-ring/60`}
+                                        >
+                                          Missing
+                                        </span>
+                                      </TooltipTrigger>
+                                      <TooltipContent
+                                        side="top"
+                                        className="max-w-xs"
+                                      >
+                                        {issueMessageByField.get(row.field) ??
+                                          `This field is missing from ${DOC_NAMES[key]}.`}
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  )
+                                : formatValue(value);
+                              if (status !== "passed" && present) {
                                 if (isTie) {
                                   // No consensus: highlight both sides the
                                   // same way, no check mark, no bold "winner".
@@ -780,7 +975,7 @@ export function ResultsClient({ shipmentId }: { shipmentId: string }) {
                           </TableRow>
                         );
                       })}
-                      {matchCount > 0 && (
+                      {passedCount > 0 && (
                         <TableRow
                           className="cursor-pointer hover:bg-muted/40"
                           onClick={() => setShowMatched((v) => !v)}
@@ -796,8 +991,8 @@ export function ResultsClient({ shipmentId }: { shipmentId: string }) {
                                 <ChevronRight className="size-4 shrink-0" />
                               )}
                               <Check className="size-3.5 shrink-0 text-muted-foreground/70" />
-                              {matchCount} field{matchCount === 1 ? "" : "s"}{" "}
-                              matched
+                              {passedCount} Passed field
+                              {passedCount === 1 ? "" : "s"}
                               {!showMatched && " — click to show"}
                             </span>
                           </TableCell>

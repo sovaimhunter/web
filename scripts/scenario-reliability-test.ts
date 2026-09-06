@@ -2,20 +2,25 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { compareDocuments } from "../lib/compare";
+import { normalizeCheckStatus } from "../lib/check-status";
 import { extractAll } from "../lib/extract";
 import {
   DOC_KEYS,
   type DocFields,
   type DocKey,
-  type FieldStatus,
+  type CheckStatus,
 } from "../lib/types";
 
+type StoredStatus = CheckStatus | "match" | "mismatch";
+type ReliabilityMode = "rules" | "ai";
+
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
-const testDataRoot = path.resolve(scriptDir, "../../test-data");
-const scenarioRoot = path.join(testDataRoot, "scenarios");
+const testDataRoot = path.resolve(scriptDir, "../tests/fixtures");
+const scenarioRoot = path.resolve(
+  process.env.PDF_FIXTURE_ROOT ?? path.join(testDataRoot, "scenarios"),
+);
 const manifestPath = path.join(testDataRoot, "scenarios.json");
-const reportPath = path.join(testDataRoot, "scenario-reliability-report.md");
-const rawResultsPath = path.join(testDataRoot, "scenario-reliability-results.json");
+const reportRoot = path.resolve("test-results");
 
 const FILE_NAMES: Record<DocKey, string> = {
   invoice: "01_commercial_invoice.pdf",
@@ -46,7 +51,7 @@ type Scenario = {
   name: string;
   purpose: string;
   documents: Record<DocKey, DocFields>;
-  expected: Partial<Record<keyof DocFields, FieldStatus>>;
+  expected: Partial<Record<keyof DocFields, StoredStatus>>;
 };
 
 type Manifest = {
@@ -60,7 +65,7 @@ type RunResult = {
   scenarioName: string;
   run: number;
   passed: boolean;
-  statuses: Record<string, FieldStatus | "missing-row">;
+  statuses: Record<string, CheckStatus | "missing-row">;
   planted: number;
   detected: number;
   exact: number;
@@ -73,6 +78,7 @@ type RunResult = {
 };
 
 function loadEnv(file: string): void {
+  if (!fs.existsSync(file)) return;
   const text = fs.readFileSync(file, "utf8");
   for (const line of text.split("\n")) {
     const trimmed = line.trim();
@@ -125,16 +131,29 @@ function percent(numerator: number, denominator: number): string {
   return `${((numerator / denominator) * 100).toFixed(0)}%`;
 }
 
-async function runScenario(scenario: Scenario, run: number): Promise<RunResult> {
-  const scenarioDir = path.join(scenarioRoot, scenario.id);
-  const files = {} as Record<DocKey, File>;
-  for (const key of DOC_KEYS) {
-    const name = FILE_NAMES[key];
-    const buffer = fs.readFileSync(path.join(scenarioDir, name));
-    files[key] = new File([buffer], name, { type: "application/pdf" });
+async function runScenario(
+  scenario: Scenario,
+  run: number,
+  mode: ReliabilityMode,
+): Promise<RunResult> {
+  let extracted: Record<DocKey, DocFields>;
+  if (mode === "ai") {
+    const scenarioDir = path.join(scenarioRoot, scenario.id);
+    if (!fs.existsSync(scenarioDir)) {
+      throw new Error(
+        `PDF fixtures are not available at ${scenarioRoot}. Restore the ignored local files or set PDF_FIXTURE_ROOT.`,
+      );
+    }
+    const files = {} as Record<DocKey, File>;
+    for (const key of DOC_KEYS) {
+      const name = FILE_NAMES[key];
+      const buffer = fs.readFileSync(path.join(scenarioDir, name));
+      files[key] = new File([buffer], name, { type: "application/pdf" });
+    }
+    extracted = await extractAll(files);
+  } else {
+    extracted = structuredClone(scenario.documents);
   }
-
-  const extracted = await extractAll(files);
   const comparison = compareDocuments(extracted);
   const actual = new Map(
     comparison.rows.map((row) => [row.key as keyof DocFields, row.status]),
@@ -143,7 +162,7 @@ async function runScenario(scenario: Scenario, run: number): Promise<RunResult> 
     ...actual.keys(),
     ...(Object.keys(scenario.expected) as (keyof DocFields)[]),
   ]);
-  const statuses: Record<string, FieldStatus | "missing-row"> = {};
+  const statuses: Record<string, CheckStatus | "missing-row"> = {};
   const failures: string[] = [];
   let planted = 0;
   let detected = 0;
@@ -151,14 +170,17 @@ async function runScenario(scenario: Scenario, run: number): Promise<RunResult> 
   let falsePositives = 0;
 
   for (const field of fields) {
-    const expected = scenario.expected[field] ?? "match";
+    const expected = normalizeCheckStatus(
+      scenario.expected[field],
+      "passed",
+    );
     const observed = actual.get(field) ?? "missing-row";
     statuses[String(field)] = observed;
-    if (expected !== "match") {
+    if (expected !== "passed") {
       planted += 1;
-      if (observed !== "match" && observed !== "missing-row") detected += 1;
+      if (observed !== "passed" && observed !== "missing-row") detected += 1;
       if (observed === expected) exact += 1;
-    } else if (observed !== "match" && observed !== "missing-row") {
+    } else if (observed !== "passed" && observed !== "missing-row") {
       falsePositives += 1;
     }
     if (observed !== expected) {
@@ -169,17 +191,19 @@ async function runScenario(scenario: Scenario, run: number): Promise<RunResult> 
   let extractionChecked = 0;
   let extractionMatched = 0;
   const extractionMismatches: string[] = [];
-  for (const key of DOC_KEYS) {
-    for (const field of EXTRACTED_FIELDS) {
-      extractionChecked += 1;
-      const expected = scenario.documents[key][field];
-      const observed = extracted[key][field];
-      if (extractionEqual(field, expected, observed)) {
-        extractionMatched += 1;
-      } else {
-        extractionMismatches.push(
-          `${key}.${String(field)} expected=${JSON.stringify(expected)} actual=${JSON.stringify(observed)}`,
-        );
+  if (mode === "ai") {
+    for (const key of DOC_KEYS) {
+      for (const field of EXTRACTED_FIELDS) {
+        extractionChecked += 1;
+        const expected = scenario.documents[key][field];
+        const observed = extracted[key][field];
+        if (extractionEqual(field, expected, observed)) {
+          extractionMatched += 1;
+        } else {
+          extractionMismatches.push(
+            `${key}.${String(field)} expected=${JSON.stringify(expected)} actual=${JSON.stringify(observed)}`,
+          );
+        }
       }
     }
   }
@@ -206,7 +230,17 @@ function writeReport(
   manifest: Manifest,
   runs: number,
   results: RunResult[],
+  mode: ReliabilityMode,
 ): void {
+  fs.mkdirSync(reportRoot, { recursive: true });
+  const reportPath = path.join(
+    reportRoot,
+    `scenario-reliability-${mode}.md`,
+  );
+  const rawResultsPath = path.join(
+    reportRoot,
+    `scenario-reliability-${mode}.json`,
+  );
   const planted = results.reduce((sum, result) => sum + result.planted, 0);
   const detected = results.reduce((sum, result) => sum + result.detected, 0);
   const exact = results.reduce((sum, result) => sum + result.exact, 0);
@@ -227,14 +261,18 @@ function writeReport(
     "# TradeLynk Scenario Reliability Report",
     "",
     `**Date:** ${new Date().toISOString().slice(0, 10)}`,
-    `**Method:** ${manifest.scenarios.length} scenarios × ${runs} runs = ${results.length} complete checks (${results.length * 3} PDF extractions).`,
+    `**Method:** ${manifest.scenarios.length} scenarios × ${runs} runs = ${results.length} complete checks (${mode === "ai" ? `${results.length * 3} PDF extractions` : "deterministic structured-field validation"}).`,
     "",
     "## Summary",
     "",
     `- Planted issues detected: ${detected}/${planted} (${percent(detected, planted)})`,
     `- Exact severity: ${exact}/${planted} (${percent(exact, planted)})`,
     `- False positives: ${falsePositives}`,
-    `- Field extraction agreement: ${extractionMatched}/${extractionChecked} (${percent(extractionMatched, extractionChecked)})`,
+    ...(mode === "ai"
+      ? [
+          `- Field extraction agreement: ${extractionMatched}/${extractionChecked} (${percent(extractionMatched, extractionChecked)})`,
+        ]
+      : []),
     "",
     "## Scenario results",
     "",
@@ -272,26 +310,33 @@ function writeReport(
     "",
     "## Interpretation",
     "",
-    "- A planted issue is detected when the final status is `review` or `mismatch`.",
-    "- A false positive is any non-match status on a field expected to match.",
-    "- Repeatable means every run produced the same field-status map for that scenario; it is N/A when only one run was performed.",
+    "- A planted issue is detected when the final status is `review` or `must_fix`.",
+    "- A false positive is any non-passed status on a field expected to pass.",
+    "- Repeatable means every run produced the same field-status map for that scenario; reports require at least two runs.",
     "- Extraction agreement is diagnostic only; the final issue metrics remain the product outcome.",
     "",
   );
   fs.writeFileSync(reportPath, lines.join("\n"), "utf8");
   fs.writeFileSync(
     rawResultsPath,
-    `${JSON.stringify({ generated_at: new Date().toISOString(), runs, results }, null, 2)}\n`,
+    `${JSON.stringify({ generated_at: new Date().toISOString(), mode, runs, results }, null, 2)}\n`,
     "utf8",
   );
 }
 
 async function main(): Promise<void> {
   loadEnv(path.resolve(".env.local"));
+  const mode = (process.env.RELIABILITY_MODE ?? "rules") as ReliabilityMode;
+  if (mode !== "rules" && mode !== "ai") {
+    throw new Error(`Unsupported RELIABILITY_MODE: ${mode}`);
+  }
   const manifest = JSON.parse(
     fs.readFileSync(manifestPath, "utf8"),
   ) as Manifest;
-  const runs = Number(process.env.RUNS ?? 3);
+  const runs = Number(process.env.RUNS ?? (mode === "ai" ? 3 : 5));
+  if (!Number.isInteger(runs) || runs < 2) {
+    throw new Error("RUNS must be an integer of at least 2 for repeatability.");
+  }
   const results: RunResult[] = [];
 
   for (const scenario of manifest.scenarios) {
@@ -299,21 +344,25 @@ async function main(): Promise<void> {
       process.stdout.write(
         `Running ${scenario.id} (${run}/${runs})...\n`,
       );
-      const result = await runScenario(scenario, run);
+      const result = await runScenario(scenario, run, mode);
       results.push(result);
       process.stdout.write(
         `  ${result.passed ? "PASS" : "FAIL"} ` +
           `detected=${result.detected}/${result.planted} ` +
-          `falsePositives=${result.falsePositives} ` +
-          `extraction=${result.extractionMatched}/${result.extractionChecked}\n`,
+          `falsePositives=${result.falsePositives}` +
+          (mode === "ai"
+            ? ` extraction=${result.extractionMatched}/${result.extractionChecked}`
+            : "") +
+          "\n",
       );
     }
   }
 
-  writeReport(manifest, runs, results);
+  writeReport(manifest, runs, results, mode);
   const failed = results.filter((result) => !result.passed).length;
-  console.log(`\nReport written to ${reportPath}`);
-  console.log(`Raw extraction results written to ${rawResultsPath}`);
+  console.log(
+    `\nReports written to ${path.join(reportRoot, `scenario-reliability-${mode}.{md,json}`)}`,
+  );
   console.log(`Complete checks failed: ${failed}/${results.length}`);
   if (failed > 0) process.exitCode = 1;
 }

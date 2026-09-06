@@ -2,7 +2,7 @@ import type {
   ComparisonResult,
   DocFields,
   DocKey,
-  FieldStatus,
+  CheckStatus,
   FieldRow,
   Issue,
 } from "./types";
@@ -328,7 +328,7 @@ export function compareDocuments(
     const missing = requiredDocs.filter((key) => !isPresent(docs[key][field]));
     if (missing.length === 0) continue;
     issues.push({
-      severity: "warning",
+      status: "review",
       field: LABELS[field],
       message: `${LABELS[field]} is missing from ${missing
         .map((key) => DOC_NAMES[key])
@@ -356,7 +356,7 @@ export function compareDocuments(
       (value) => similarity(normalizeCompany(reference), normalizeCompany(value)) >= 0.9,
     );
     issues.push({
-      severity: looksLikeTypo ? "warning" : "error",
+      status: looksLikeTypo ? "review" : "must_fix",
       field: LABELS[field],
       message: `${LABELS[field]} differs across documents${
         looksLikeTypo ? " (looks like a minor typo)" : ""
@@ -371,7 +371,7 @@ export function compareDocuments(
     new Set(Object.values(quantities).map(Number).map(round2)).size > 1
   ) {
     issues.push({
-      severity: "error",
+      status: "must_fix",
       field: "Unit quantity",
       message: "Quantity does not match",
       detail: toDetail(quantities),
@@ -392,7 +392,7 @@ export function compareDocuments(
       }
     }
     issues.push({
-      severity: "error",
+      status: "must_fix",
       field: "No. of packages",
       message: "Package count does not match",
       detail: toDetail(raw),
@@ -410,7 +410,7 @@ export function compareDocuments(
       formatted[key as DocKey] = `${formatKg(Number(value))} kg`;
     }
     issues.push({
-      severity: "warning",
+      status: "review",
       field: LABELS[field],
       message: `${field === "gross_weight_kg" ? "Gross" : "Net"} weight does not match`,
       detail: toDetail(formatted),
@@ -424,7 +424,7 @@ export function compareDocuments(
   );
   if (codes.size > 1) {
     issues.push({
-      severity: "warning",
+      status: "review",
       field: "Incoterms",
       message: "Incoterm does not match",
       detail: toDetail(incoterms),
@@ -440,7 +440,7 @@ export function compareDocuments(
     );
     if (round2(sum) !== round2(invoice.total_amount)) {
       issues.push({
-        severity: "error",
+        status: "must_fix",
         field: "Invoice value",
         message: "Line items do not sum to the stated total",
         detail: {
@@ -460,7 +460,7 @@ export function compareDocuments(
   );
   if (currencyCodes.size > 1) {
     issues.push({
-      severity: "error",
+      status: "must_fix",
       field: "Currency",
       message: "Currency does not match",
       detail: toDetail(currencies),
@@ -497,7 +497,7 @@ export function compareDocuments(
       }
     }
     issues.push({
-      severity: "warning",
+      status: "review",
       field: "Description of goods",
       message: "Product material does not match",
       detail: toDetail(raw),
@@ -542,12 +542,10 @@ export function compareDocuments(
     const label = LABELS[field] ?? field;
     const issue = issues.find((i) => i.field === label);
     if (issue) consistent = false;
-    const status: FieldStatus = issue
-      ? issue.severity === "error"
-        ? "mismatch"
-        : "review"
+    const status: CheckStatus = issue
+      ? issue.status
       : consistent
-        ? "match"
+        ? "passed"
         : "review";
 
     const presentEntries = DOC_KEYS.map((key) => ({

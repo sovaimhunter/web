@@ -1,6 +1,10 @@
 import { deleteResult } from "./results";
 
-export type ShipmentStatus = "draft" | "documents_ready" | "checked";
+export type ShipmentStatus =
+  | "draft"
+  | "documents_ready"
+  | "checked"
+  | "check_failed";
 
 export type Shipment = {
   id: string;
@@ -8,9 +12,7 @@ export type Shipment = {
   reference: string;
   createdAt: string;
   status: ShipmentStatus;
-  errorCount?: number;
-  warningCount?: number;
-  mismatchCount?: number;
+  mustFixCount?: number;
   reviewCount?: number;
 };
 
@@ -21,8 +23,28 @@ function readAll(): Shipment[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as Shipment[]) : [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map((value) => {
+      const stored = value as Shipment & {
+        errorCount?: number;
+        warningCount?: number;
+        mismatchCount?: number;
+      };
+      const shipment: Shipment = {
+        id: stored.id,
+        name: stored.name,
+        reference: stored.reference,
+        createdAt: stored.createdAt,
+        status: stored.status,
+      };
+      const mustFixCount =
+        stored.mustFixCount ?? stored.mismatchCount ?? stored.errorCount;
+      const reviewCount = stored.reviewCount ?? stored.warningCount;
+      if (mustFixCount !== undefined) shipment.mustFixCount = mustFixCount;
+      if (reviewCount !== undefined) shipment.reviewCount = reviewCount;
+      return shipment;
+    });
   } catch {
     return [];
   }

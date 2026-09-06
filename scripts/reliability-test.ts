@@ -7,7 +7,7 @@ import {
   DOC_KEYS,
   type DocFields,
   type DocKey,
-  type FieldStatus,
+  type CheckStatus,
 } from "../lib/types";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
@@ -19,14 +19,14 @@ const FILE_NAMES: Record<DocKey, string> = {
   bill_of_lading: "03_bill_of_lading.pdf",
 };
 
-type PlantedError = { key: keyof DocFields; expected: FieldStatus };
+type PlantedError = { key: keyof DocFields; expected: CheckStatus };
 
 const SETS: { id: string; errors: PlantedError[] }[] = [
   {
     id: "set-a",
     errors: [
-      { key: "consignee", expected: "mismatch" },
-      { key: "number_of_packages", expected: "mismatch" },
+      { key: "consignee", expected: "must_fix" },
+      { key: "number_of_packages", expected: "must_fix" },
       { key: "gross_weight_kg", expected: "review" },
       { key: "description_of_goods", expected: "review" },
     ],
@@ -34,7 +34,7 @@ const SETS: { id: string; errors: PlantedError[] }[] = [
   {
     id: "set-b",
     errors: [
-      { key: "total_amount", expected: "mismatch" },
+      { key: "total_amount", expected: "must_fix" },
       { key: "port_of_discharge", expected: "review" },
       { key: "incoterms", expected: "review" },
     ],
@@ -46,7 +46,7 @@ const SETS: { id: string; errors: PlantedError[] }[] = [
       { key: "unit_quantity", expected: "review" },
       { key: "net_weight_kg", expected: "review" },
       { key: "country_of_origin", expected: "review" },
-      { key: "currency", expected: "mismatch" },
+      { key: "currency", expected: "must_fix" },
     ],
   },
 ];
@@ -69,7 +69,7 @@ function loadEnv(file: string): void {
 
 async function runOnce(
   setDir: string,
-): Promise<Map<keyof DocFields, FieldStatus | undefined>> {
+): Promise<Map<keyof DocFields, CheckStatus | undefined>> {
   const files = {} as Record<DocKey, File>;
   for (const key of DOC_KEYS) {
     const name = FILE_NAMES[key];
@@ -99,7 +99,7 @@ async function main(): Promise<void> {
       for (const planted of set.errors) {
         const record = (perError[planted.key] ??= { detected: 0, exact: 0 });
         const actual = statuses.get(planted.key);
-        if (actual && actual !== "match") record.detected += 1;
+        if (actual && actual !== "passed") record.detected += 1;
         if (actual === planted.expected) record.exact += 1;
       }
     }

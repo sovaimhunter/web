@@ -1,6 +1,6 @@
 import OpenAI from "openai";
-import type { DocFields, DocKey } from "./types";
-import { DOC_NAMES } from "./types";
+import type { CheckFailure, DocFields, DocKey } from "./types";
+import { DOC_KEYS, DOC_NAMES } from "./types";
 import { documents as mockDocuments } from "./mockData";
 
 const MODEL = process.env.OPENAI_MODEL ?? "gpt-4.1-mini";
@@ -26,6 +26,16 @@ const FIELDS = [
 
 const nullableString = { type: ["string", "null"] } as const;
 const nullableNumber = { type: ["number", "null"] } as const;
+
+class InvalidPdfError extends Error {}
+class NoFieldsExtractedError extends Error {}
+
+export class ExtractionBatchError extends Error {
+  constructor(public readonly failures: CheckFailure[]) {
+    super("One or more documents could not be extracted.");
+    this.name = "ExtractionBatchError";
+  }
+}
 
 const DOC_FIELDS_SCHEMA = {
   type: "object",
@@ -111,6 +121,97 @@ function parseDocFields(text: string): DocFields {
   return fields as DocFields;
 }
 
+function hasReadableData(fields: DocFields): boolean {
+  return FIELDS.some((key) => {
+    const value = fields[key];
+    if (Array.isArray(value)) return value.length > 0;
+    return value !== null && value !== undefined && value !== "";
+  });
+}
+
+function failureFor(docKey: DocKey, error: unknown): CheckFailure {
+  if (error instanceof InvalidPdfError) {
+    return {
+      code: "UNREADABLE_PDF",
+      stage: "extraction",
+      document: docKey,
+      message: `${DOC_NAMES[docKey]} is not a readable PDF.`,
+      action: "Replace it with a valid PDF exported from the source document.",
+      retryable: false,
+    };
+  }
+  if (error instanceof NoFieldsExtractedError) {
+    return {
+      code: "NO_FIELDS_EXTRACTED",
+      stage: "extraction",
+      document: docKey,
+      message: `No shipment details could be extracted from the ${DOC_NAMES[docKey]}.`,
+      action:
+        "Check that the PDF is filled in and readable, then replace it or try again.",
+      retryable: true,
+    };
+  }
+
+  const errorName = error instanceof Error ? error.name : "";
+  const errorMessage = error instanceof Error ? error.message : "";
+  const errorStatus =
+    typeof error === "object" &&
+    error !== null &&
+    "status" in error &&
+    typeof error.status === "number"
+      ? error.status
+      : undefined;
+  if (/timeout|timed out/i.test(`${errorName} ${errorMessage}`)) {
+    return {
+      code: "PROVIDER_TIMEOUT",
+      stage: "extraction",
+      document: docKey,
+      message: `Reading the ${DOC_NAMES[docKey]} took too long.`,
+      action: "Try the check again. If it keeps timing out, use a smaller PDF.",
+      retryable: true,
+    };
+  }
+  if (
+    /OPENAI_API_KEY|api key|authentication|connection error/i.test(
+      `${errorName} ${errorMessage}`,
+    ) ||
+    errorStatus === 401 ||
+    errorStatus === 403 ||
+    errorStatus === 429 ||
+    (errorStatus !== undefined && errorStatus >= 500)
+  ) {
+    return {
+      code: "PROVIDER_UNAVAILABLE",
+      stage: "extraction",
+      message: "The document extraction service is temporarily unavailable.",
+      action: "Try again in a few moments. If it continues, contact support.",
+      retryable: true,
+    };
+  }
+  if (
+    /corrupt|invalid.*pdf|cannot.*read|could not.*read|unsupported.*pdf/i.test(
+      errorMessage,
+    )
+  ) {
+    return {
+      code: "UNREADABLE_PDF",
+      stage: "extraction",
+      document: docKey,
+      message: `${DOC_NAMES[docKey]} could not be read.`,
+      action: "Replace it with a newly exported or repaired PDF.",
+      retryable: false,
+    };
+  }
+  return {
+    code: "EXTRACTION_FAILED",
+    stage: "extraction",
+    document: docKey,
+    message: `The ${DOC_NAMES[docKey]} could not be extracted.`,
+    action: "Try again. If the problem continues, replace this PDF.",
+    retryable: true,
+  };
+}
+
 function normalizeParty(value: string | null): string | null {
   if (!value) return null;
   return value
@@ -171,7 +272,41 @@ export async function extractFields(
   file: File,
   docKey: DocKey,
 ): Promise<DocFields> {
-  if (process.env.EXTRACTION_MODE === "mock") {
+  const extractionMode = process.env.EXTRACTION_MODE;
+  if (extractionMode === "mock_timeout") {
+    const error = new Error("Simulated extraction request timed out.");
+    error.name = "TimeoutError";
+    throw error;
+  }
+  if (extractionMode === "mock_provider_error") {
+    const error = new Error("Simulated extraction provider server error.") as Error & {
+      status: number;
+    };
+    error.status = 500;
+    throw error;
+  }
+  if (extractionMode === "mock_extraction_failure") {
+    throw new Error("Simulated extraction failure.");
+  }
+  if (
+    extractionMode === "mock_partial_failure" &&
+    docKey === "packing_list"
+  ) {
+    throw new Error("Simulated packing list extraction failure.");
+  }
+  if (
+    extractionMode === "mock_no_fields" &&
+    docKey === "invoice"
+  ) {
+    throw new NoFieldsExtractedError(
+      "Local test mode: no fields extracted from the invoice.",
+    );
+  }
+  if (
+    extractionMode === "mock" ||
+    extractionMode === "mock_no_fields" ||
+    extractionMode === "mock_partial_failure"
+  ) {
     return structuredClone(mockDocuments[docKey]);
   }
 
@@ -181,8 +316,16 @@ export async function extractFields(
     );
   }
 
-  const client = new OpenAI();
   const bytes = Buffer.from(await file.arrayBuffer());
+  const headerOffset = bytes.subarray(0, 1024).indexOf("%PDF-");
+  const trailerOffset = bytes.subarray(Math.max(0, bytes.length - 4096)).indexOf("%%EOF");
+  if (headerOffset === -1 || trailerOffset === -1) {
+    throw new InvalidPdfError(
+      "The file does not contain a complete PDF header and trailer.",
+    );
+  }
+
+  const client = new OpenAI({ timeout: 90_000, maxRetries: 1 });
   const base64 = bytes.toString("base64");
 
   const response = await client.responses.create({
@@ -216,19 +359,44 @@ export async function extractFields(
     ],
   });
 
-  return parseDocFields(response.output_text);
+  const fields = parseDocFields(response.output_text);
+  if (!hasReadableData(fields)) {
+    throw new NoFieldsExtractedError("The model returned no readable fields.");
+  }
+  return fields;
 }
 
 export async function extractAll(
   files: Record<DocKey, File>,
 ): Promise<Record<DocKey, DocFields>> {
-  const entries = await Promise.all(
-    (Object.keys(files) as DocKey[]).map(async (key) => [
-      key,
-      await extractFields(files[key], key),
-    ] as const),
+  const settled = await Promise.allSettled(
+    DOC_KEYS.map((key) => extractFields(files[key], key)),
   );
-  const documents = Object.fromEntries(entries) as Record<DocKey, DocFields>;
+  const failures: CheckFailure[] = [];
+  const documents = {} as Record<DocKey, DocFields>;
+
+  settled.forEach((result, index) => {
+    const key = DOC_KEYS[index];
+    if (result.status === "fulfilled") {
+      documents[key] = result.value;
+    } else {
+      failures.push(failureFor(key, result.reason));
+    }
+  });
+
+  if (failures.length > 0) {
+    const uniqueFailures = failures.filter(
+      (failure, index, all) =>
+        all.findIndex(
+          (candidate) =>
+            candidate.code === failure.code &&
+            candidate.document === failure.document &&
+            candidate.message === failure.message,
+        ) === index,
+    );
+    throw new ExtractionBatchError(uniqueFailures);
+  }
+
   repairShiftedParties(documents);
   return documents;
 }
