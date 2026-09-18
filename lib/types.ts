@@ -43,6 +43,48 @@ export const DOC_NAMES: Record<DocKey, string> = {
 
 export type CheckStatus = "must_fix" | "review" | "passed";
 
+export type AheccEntry = {
+  code: string;
+  description: string;
+  unitOfQuantity: string | null;
+};
+
+export type AheccDataset = {
+  id: string;
+  title: string;
+  hsEdition: string;
+  effectiveFrom: string;
+  updatedAt: string;
+  sourceUrl: string;
+  sourceChecksum: string;
+  entries: readonly AheccEntry[];
+};
+
+export type HsValidationReason =
+  | "CODE_MISSING"
+  | "INVALID_FORMAT"
+  | "CODES_CONFLICT"
+  | "CODE_NOT_FOUND"
+  | "AHECC_EXTENSION_REQUIRED"
+  | "DESCRIPTION_UNAVAILABLE"
+  | "DESCRIPTION_REVIEW";
+
+export type HsCodeScope = "none" | "hs" | "ahecc" | "mixed" | "invalid";
+
+export type HsCodeValidation = {
+  status: CheckStatus;
+  scope: HsCodeScope;
+  rawCodes: Partial<Record<DocKey, string>>;
+  normalizedCodes: Partial<Record<DocKey, string>>;
+  normalizedCode: string | null;
+  exists: boolean | null;
+  officialCode: string | null;
+  officialDescription: string | null;
+  unitOfQuantity: string | null;
+  reasons: HsValidationReason[];
+  dataset: Omit<AheccDataset, "entries">;
+};
+
 export type ActionableCheckStatus = Exclude<CheckStatus, "passed">;
 
 export type Issue = {
@@ -66,6 +108,7 @@ export type ComparisonResult = {
   documents: Record<DocKey, DocFields>;
   issues: Issue[];
   rows: FieldRow[];
+  hsValidation: HsCodeValidation;
 };
 
 export type CheckResult = ComparisonResult & {

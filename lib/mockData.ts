@@ -11,7 +11,7 @@ export const documents: Record<DocKey, DocFields> = {
     exporter: "Outback Origins Art Co., 42 Todd Street, Alice Springs NT 0870, Australia",
     consignee: "Galerie Nordlicht GmbH Auguststrasse 19, 10117 Berlin, Germany",
     description_of_goods: "Aboriginal acrylic on linen",
-    hs_code: "9701.21",
+    hs_code: "9701.21.00",
     country_of_origin: "Australia",
     incoterms: "CIP Berlin, Germany",
     port_of_loading: "Sydney, Australia",

@@ -31,7 +31,7 @@ describe("shipments with multiple issues", () => {
     expect(actual.get("currency")).toBe("must_fix");
     expect(actual.get("unit_quantity")).toBe("must_fix");
     expect(actual.get("gross_weight_kg")).toBe("review");
-    expect(actual.get("hs_code")).toBe("review");
+    expect(actual.get("hs_code")).toBe("must_fix");
     expect(actual.get("description_of_goods")).toBe("review");
   });
 

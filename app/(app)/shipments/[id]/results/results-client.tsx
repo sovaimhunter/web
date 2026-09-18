@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   ChevronRight,
   ChevronUp,
+  ExternalLink,
   FileText,
   UploadCloud,
   XCircle,
@@ -49,6 +50,7 @@ import {
   type DocKey,
   type FailedCheckResult,
   type FieldRow,
+  type HsCodeValidation,
 } from "@/lib/types";
 import { CHECK_STATUS_LABEL } from "@/lib/check-status";
 import { loadResult } from "@/lib/results";
@@ -198,6 +200,123 @@ function formatIssueValue(
 
 function isPresent(value: string | number | null): value is string | number {
   return value !== null && value !== undefined && value !== "";
+}
+
+function hsValidationSummary(validation: HsCodeValidation): string {
+  if (validation.reasons.includes("INVALID_FORMAT")) {
+    return "Use a six-digit HS subheading or an eight-digit Australian AHECC item.";
+  }
+  if (validation.reasons.includes("CODES_CONFLICT")) {
+    return "The documents contain incompatible HS or AHECC codes.";
+  }
+  if (validation.reasons.includes("CODE_MISSING")) {
+    return "No code was available for official-source validation.";
+  }
+  if (validation.reasons.includes("CODE_NOT_FOUND")) {
+    return "The code was not found in the pinned official AHECC dataset.";
+  }
+  if (validation.reasons.includes("AHECC_EXTENSION_REQUIRED")) {
+    return "The six-digit HS subheading exists, but the Australian eight-digit export item still needs confirmation.";
+  }
+  if (validation.reasons.includes("DESCRIPTION_REVIEW")) {
+    return "The code exists, but the document description needs human review against the official description.";
+  }
+  if (validation.reasons.includes("DESCRIPTION_UNAVAILABLE")) {
+    return "The code exists, but no usable goods description was available for the compatibility check.";
+  }
+  return "The code exists in the pinned official AHECC dataset and no automated warning was found.";
+}
+
+function HsValidationPanel({
+  validation,
+}: {
+  validation: HsCodeValidation;
+}) {
+  const isMustFix = validation.status === "must_fix";
+  const isReview = validation.status === "review";
+
+  return (
+    <section
+      aria-labelledby="hs-validation-heading"
+      className={`mb-8 overflow-hidden rounded-xl border bg-card shadow-sm ${
+        isMustFix
+          ? "border-red-200 dark:border-red-900/60"
+          : isReview
+            ? "border-amber-200 dark:border-amber-900/60"
+            : "border-green-200 dark:border-green-900/60"
+      }`}
+    >
+      <div className="flex flex-col gap-3 border-b bg-muted/20 px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 id="hs-validation-heading" className="font-semibold">
+            HS code validation
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {hsValidationSummary(validation)}
+          </p>
+        </div>
+        <Badge
+          className={
+            isMustFix
+              ? "w-fit bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300"
+              : isReview
+                ? "w-fit bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
+                : "w-fit bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300"
+          }
+        >
+          {CHECK_STATUS_LABEL[validation.status]}
+        </Badge>
+      </div>
+
+      <div className="p-5">
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="rounded-lg border bg-muted/20 px-3.5 py-3">
+            <p className="text-xs font-medium text-muted-foreground">
+              Validated code
+            </p>
+            <p className="mt-1 font-mono text-sm font-semibold">
+              {validation.normalizedCode ?? "Not available"}
+            </p>
+          </div>
+          <div className="rounded-lg border bg-muted/20 px-3.5 py-3 md:col-span-2">
+            <p className="text-xs font-medium text-muted-foreground">
+              Official AHECC description
+            </p>
+            <p className="mt-1 text-sm font-medium">
+              {validation.officialDescription ?? "No official match found"}
+            </p>
+            {validation.unitOfQuantity && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Unit of quantity: {validation.unitOfQuantity}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-col gap-2 border-t pt-4 text-sm sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="font-medium">{validation.dataset.title}</p>
+            <p className="text-xs text-muted-foreground">
+              HS {validation.dataset.hsEdition} · updated {validation.dataset.updatedAt}
+            </p>
+          </div>
+          <a
+            href={validation.dataset.sourceUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 font-medium text-primary underline-offset-4 hover:underline"
+          >
+            Open official ABS source
+            <ExternalLink className="size-3.5" />
+          </a>
+        </div>
+        <p className="mt-3 text-xs text-muted-foreground">
+          This automated check is not a customs classification ruling. Confirm
+          Review items with a customs broker or the relevant authority.
+        </p>
+      </div>
+    </section>
+  );
 }
 
 function DocChip({ label, filename }: { label: string; filename?: string }) {
@@ -407,7 +526,9 @@ export function ResultsClient({ shipmentId }: { shipmentId: string }) {
     return <FailedCheckResults shipmentId={shipmentId} result={result} />;
   }
 
-  const noFields = result.rows.length === 0;
+  const noFields = result.rows.every((row) =>
+    DOC_KEYS.every((key) => !isPresent(row.vals[key])),
+  );
   const statusOf = (row: FieldRow): CheckStatus => {
     if (row.status) return row.status;
     const issue = result.issues.find((i) => i.field === row.field);
@@ -591,6 +712,10 @@ export function ResultsClient({ shipmentId }: { shipmentId: string }) {
             </AlertDescription>
           </Alert>
         ) : null}
+
+        {result.hsValidation && (
+          <HsValidationPanel validation={result.hsValidation} />
+        )}
 
         {!noFields && (
           <>

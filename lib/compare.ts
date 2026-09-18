@@ -7,6 +7,11 @@ import type {
   Issue,
 } from "./types";
 import { DOC_KEYS, DOC_NAMES } from "./types";
+import { AHECC_DATASET } from "./ahecc-data";
+import {
+  normalizeHsCode as normalizeOfficialHsCode,
+  validateHsCodes,
+} from "./hs-validation";
 
 const LABELS: Record<string, string> = {
   exporter: "Exporter/Shipper",
@@ -103,8 +108,29 @@ function vesselsEquivalent(a: unknown, b: unknown): boolean {
 
 function normalizeHsCode(value: unknown): string | null {
   if (!isPresent(value)) return null;
-  const digits = String(value).replace(/\D/g, "");
-  return digits || normalize(value);
+  return normalizeOfficialHsCode(String(value));
+}
+
+function hsValidationMessage(reasons: string[]): string {
+  if (reasons.includes("INVALID_FORMAT")) {
+    return "HS code must use a valid six-digit HS or eight-digit AHECC format";
+  }
+  if (reasons.includes("CODES_CONFLICT")) {
+    return "HS code differs across documents";
+  }
+  if (reasons.includes("CODE_MISSING")) {
+    return "No HS code was extracted from the documents";
+  }
+  if (reasons.includes("CODE_NOT_FOUND")) {
+    return "HS code was not found in the official AHECC dataset";
+  }
+  if (reasons.includes("AHECC_EXTENSION_REQUIRED")) {
+    return "A six-digit HS code was found; confirm the eight-digit AHECC export item";
+  }
+  if (reasons.includes("DESCRIPTION_REVIEW")) {
+    return "The goods description may not match the official AHECC description";
+  }
+  return "The HS code needs review";
 }
 
 function normalizePort(value: unknown): string | null {
@@ -318,6 +344,30 @@ export function compareDocuments(
   docs: Record<DocKey, DocFields>,
 ): ComparisonResult {
   const issues: Issue[] = [];
+  const hsValidation = validateHsCodes(docs, AHECC_DATASET);
+
+  if (hsValidation.status !== "passed") {
+    const detail = Object.fromEntries(
+      DOC_KEYS.map((key) => [
+        DOC_NAMES[key],
+        hsValidation.rawCodes[key] ?? "Missing",
+      ]),
+    );
+    detail["Official AHECC"] = hsValidation.officialCode
+      ? `${hsValidation.officialCode} — ${hsValidation.officialDescription}`
+      : hsValidation.exists === false
+        ? "Not found"
+        : "Not available";
+    detail["Dataset"] =
+      `${hsValidation.dataset.title} · updated ${hsValidation.dataset.updatedAt}`;
+
+    issues.push({
+      status: hsValidation.status,
+      field: "HS code",
+      message: hsValidationMessage(hsValidation.reasons),
+      detail,
+    });
+  }
 
   // Required-field coverage. A field is only considered missing on document
   // types where it is expected, so invoice-only values do not create noise.
@@ -511,11 +561,13 @@ export function compareDocuments(
       DOC_KEYS.map((key) => [key, docs[key][field]]),
     ) as Record<DocKey, string | number | null>;
     const present = Object.values(vals).filter(isPresent);
-    if (present.length === 0) continue;
+    if (present.length === 0 && field !== "hs_code") continue;
 
     const base = present[0];
     let consistent: boolean;
-    if (field === "description_of_goods") {
+    if (field === "hs_code") {
+      consistent = hsValidation.status === "passed";
+    } else if (field === "description_of_goods") {
       consistent = present.every((v) => descriptionsEquivalent(base, v));
     } else if (
       ["gross_weight_kg", "net_weight_kg", "total_amount", "unit_quantity"].includes(field)
@@ -532,9 +584,6 @@ export function compareDocuments(
       consistent = present.every((v) => vesselsEquivalent(base, v));
     } else if (field === "port_of_loading" || field === "port_of_discharge") {
       consistent = present.every((v) => portsEquivalent(base, v));
-    } else if (field === "hs_code") {
-      consistent =
-        new Set(present.map((v) => normalizeHsCode(v))).size === 1;
     } else {
       consistent = present.every((v) => similarity(base, v) >= 0.999);
     }
@@ -561,7 +610,17 @@ export function compareDocuments(
     const missingOutliers = (REQUIRED_DOCS[field] ?? []).filter(
       (key) => !isPresent(docs[key][field]),
     );
-    const outliers = [...new Set([...valueOutliers, ...missingOutliers])];
+    const hsMissingOutliers =
+      field === "hs_code" && hsValidation.reasons.includes("CODE_MISSING")
+        ? DOC_KEYS
+        : [];
+    const outliers = [
+      ...new Set([
+        ...valueOutliers,
+        ...missingOutliers,
+        ...hsMissingOutliers,
+      ]),
+    ];
     rows.push({
       field: label,
       key: field,
@@ -573,5 +632,5 @@ export function compareDocuments(
     });
   }
 
-  return { documents: docs, issues, rows };
+  return { documents: docs, issues, rows, hsValidation };
 }

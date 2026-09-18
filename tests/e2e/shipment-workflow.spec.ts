@@ -36,6 +36,14 @@ test("new exporter completes the workflow and re-checks the same shipment", asyn
   await expect(page).toHaveURL(/\/shipments\/[^/]+\/results$/);
   const firstResultUrl = page.url();
   await expect(page.getByRole("heading", { name: "Consistency Check Results" })).toBeVisible();
+  const hsValidation = page.getByRole("region", {
+    name: "HS code validation",
+  });
+  await expect(hsValidation).toBeVisible();
+  await expect(hsValidation.getByText("97012100", { exact: true })).toBeVisible();
+  await expect(
+    hsValidation.getByRole("link", { name: "Open official ABS source" }),
+  ).toHaveAttribute("href", /abs\.gov\.au/);
   await expect(
     page.locator('[data-slot="badge"]').filter({ hasText: /^\d+ Passed$/ }),
   ).toBeVisible();
