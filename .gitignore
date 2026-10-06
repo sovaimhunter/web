@@ -57,6 +57,9 @@ next-env.d.ts
 /docs/*
 !/docs/data-architecture.md
 
+# project runtime policy required by CI and production
+!/.agents/skills/document-consistency/SKILL.md
+
 # pi agent settings (local-only)
 /.pi/*
 # ...except the project's own document-consistency skill (version-controlled)
@@ -67,3 +70,7 @@ next-env.d.ts
 !/.pi/skills/document-consistency/SKILL.md
 
 *.sql
+
+# Supabase migrations are version-controlled source files
+!/supabase/migrations/
+!/supabase/migrations/*.sql
