@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ListTodo, Ship } from "lucide-react";
+import { UserAccount } from "@/components/auth/user-account";
 import {
   Sidebar,
   SidebarContent,
@@ -74,9 +75,7 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter>
-        <p className="truncate px-2 py-1 text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">
-          Prototype · sample data only
-        </p>
+        <UserAccount />
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>

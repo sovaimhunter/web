@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { PackagePlus, Pencil, Search, Trash2 } from "lucide-react";
@@ -34,53 +34,33 @@ import {
 } from "@/components/ui/table";
 import { Header } from "@/components/layout/header";
 import { Main } from "@/components/layout/main";
-import {
-  deleteShipment,
-  listShipmentsCached,
-  subscribeShipments,
-  updateShipment,
-  type Shipment,
-} from "@/lib/shipments";
-
-const EMPTY_SHIPMENTS: Shipment[] = [];
+import { shipmentApi } from "@/lib/persistence/api-client";
+import type { ShipmentSummary } from "@/lib/persistence/types";
 
 /** Checked shipments open on their results; anything else opens on documents. */
-function shipmentHref(shipment: Shipment): string {
-  return shipment.status === "checked" || shipment.status === "check_failed"
+function shipmentHref(shipment: ShipmentSummary): string {
+  return shipment.latestCheck
     ? `/shipments/${shipment.id}/results`
     : `/shipments/${shipment.id}/documents`;
 }
 
-function StatusBadge({ shipment }: { shipment: Shipment }) {
-  if (shipment.status === "checked") {
-    const mustFix = shipment.mustFixCount ?? 0;
-    const reviews = shipment.reviewCount ?? 0;
-    const hasMustFix = mustFix > 0;
-    const hasReviews = reviews > 0 && !hasMustFix;
+function StatusBadge({ shipment }: { shipment: ShipmentSummary }) {
+  if (shipment.status === "action_required") {
     return (
-      <Badge
-        variant={hasMustFix ? "destructive" : "secondary"}
-        className={
-          hasReviews
-            ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
-            : hasMustFix
-              ? ""
-              : "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300"
-        }
-      >
-        {hasMustFix
-          ? `${mustFix} Must Fix`
-          : hasReviews
-            ? `${reviews} Review`
-            : "Passed"}
+      <Badge variant="destructive">
+        {shipment.issueCount} issue{shipment.issueCount === 1 ? "" : "s"}
       </Badge>
     );
   }
-  if (shipment.status === "check_failed") {
-    return <Badge variant="destructive">Check incomplete</Badge>;
+  if (shipment.status === "ready_for_review") {
+    return (
+      <Badge className="bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300">
+        Ready for Review
+      </Badge>
+    );
   }
-  if (shipment.status === "documents_ready") {
-    return <Badge variant="outline">Documents ready</Badge>;
+  if (shipment.status === "checking") {
+    return <Badge variant="outline">Checking</Badge>;
   }
   return <Badge variant="secondary">Draft</Badge>;
 }
@@ -96,37 +76,54 @@ function formatDate(iso: string): string {
 export default function ShipmentsPage() {
   const router = useRouter();
   const [filter, setFilter] = useState("");
-  const [pendingDelete, setPendingDelete] = useState<Shipment | null>(null);
-  const [editing, setEditing] = useState<Shipment | null>(null);
+  const [shipments, setShipments] = useState<ShipmentSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<ShipmentSummary | null>(null);
+  const [editing, setEditing] = useState<ShipmentSummary | null>(null);
   const [editName, setEditName] = useState("");
   const [editReference, setEditReference] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
 
-  const openEditor = (shipment: Shipment) => {
+  useEffect(() => {
+    shipmentApi
+      .list()
+      .then(setShipments)
+      .catch((error: unknown) =>
+        setLoadError(error instanceof Error ? error.message : "Could not load shipments"),
+      )
+      .finally(() => setLoading(false));
+  }, []);
+
+  const openEditor = (shipment: ShipmentSummary) => {
     setEditName(shipment.name);
     setEditReference(shipment.reference);
     setEditError(null);
     setEditing(shipment);
   };
 
-  const saveEditor = (event: React.FormEvent) => {
+  const saveEditor = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!editing) return;
     if (!editName.trim()) {
       setEditError("Please give the shipment a name.");
       return;
     }
-    updateShipment(editing.id, {
-      name: editName.trim(),
-      reference: editReference.trim(),
-    });
-    setEditing(null);
+    try {
+      const updated = await shipmentApi.update(editing.id, {
+        name: editName.trim(),
+        reference: editReference.trim(),
+      });
+      setShipments((current) =>
+        current.map((shipment) =>
+          shipment.id === updated.id ? { ...shipment, ...updated } : shipment,
+        ),
+      );
+      setEditing(null);
+    } catch (error) {
+      setEditError(error instanceof Error ? error.message : "Could not save changes");
+    }
   };
-  const shipments = useSyncExternalStore(
-    subscribeShipments,
-    listShipmentsCached,
-    () => EMPTY_SHIPMENTS,
-  );
 
   const filtered = useMemo(() => {
     const query = filter.trim().toLowerCase();
@@ -169,7 +166,19 @@ export default function ShipmentsPage() {
           />
         </div>
 
-        {filtered.length === 0 ? (
+        {loadError && (
+          <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            {loadError}
+          </p>
+        )}
+
+        {loading ? (
+          <Card>
+            <CardContent className="py-8 text-sm text-muted-foreground">
+              Loading shipments…
+            </CardContent>
+          </Card>
+        ) : filtered.length === 0 ? (
           <Card>
             <CardHeader>
               <CardTitle>
@@ -341,8 +350,19 @@ export default function ShipmentsPage() {
             <Button
               variant="destructive"
               onClick={() => {
-                if (pendingDelete) deleteShipment(pendingDelete.id);
-                setPendingDelete(null);
+                if (!pendingDelete) return;
+                const id = pendingDelete.id;
+                shipmentApi
+                  .delete(id)
+                  .then(() => {
+                    setShipments((current) => current.filter((item) => item.id !== id));
+                    setPendingDelete(null);
+                  })
+                  .catch((error: unknown) =>
+                    setLoadError(
+                      error instanceof Error ? error.message : "Could not delete shipment",
+                    ),
+                  );
               }}
             >
               <Trash2 />

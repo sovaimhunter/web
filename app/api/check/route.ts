@@ -1,15 +1,29 @@
 import { NextResponse } from "next/server";
-import { compareDocuments } from "@/lib/compare";
-import { ExtractionBatchError, extractAll } from "@/lib/extract";
+import type { DocumentConsistencyCatalog } from "@/lib/agent/catalog";
+import { loadDocumentConsistencyCatalog } from "@/lib/agent/catalog-file";
 import {
-  DOC_KEYS,
-  DOC_NAMES,
-  MAX_UPLOAD_TOTAL_BYTES,
-  type CheckFailure,
-  type DocKey,
-} from "@/lib/types";
+  compareExtractedDocuments,
+  type DynamicComparison,
+} from "@/lib/agent/compare-dynamic";
+import type { ExtractedDocument } from "@/lib/agent/fields";
+import {
+  runFileConsistency,
+  type PiDocument,
+} from "@/lib/agent/pi/runtime";
+import { MAX_UPLOAD_TOTAL_BYTES, type CheckFailure } from "@/lib/types";
 
 export const maxDuration = 120;
+
+export const runtime = "nodejs";
+
+let catalogCache: DocumentConsistencyCatalog | undefined;
+
+function loadCatalog(): DocumentConsistencyCatalog {
+  if (!catalogCache) {
+    catalogCache = loadDocumentConsistencyCatalog();
+  }
+  return catalogCache;
+}
 
 function failureResponse(failures: CheckFailure[], status: number) {
   return NextResponse.json(
@@ -35,6 +49,29 @@ async function hasPdfStructure(file: File): Promise<boolean> {
   return header.indexOf("%PDF-") !== -1 && trailer.indexOf("%%EOF") !== -1;
 }
 
+function uniqueFileId(name: string, seen: Set<string>): string {
+  if (!seen.has(name)) return name;
+  let index = 2;
+  while (seen.has(`${name}-${index}`)) index += 1;
+  return `${name}-${index}`;
+}
+
+async function runMockComparison(
+  catalog: DocumentConsistencyCatalog,
+): Promise<DynamicComparison> {
+  const { documents: mockDocuments } = await import("@/lib/mockData");
+  const documents: ExtractedDocument[] = Object.entries(mockDocuments).map(
+    ([id, fields]) => ({
+      id,
+      fields,
+      extra: {},
+      errors: [],
+      provenance: { source: "mock", at: Date.now() },
+    }),
+  );
+  return compareExtractedDocuments(documents, catalog);
+}
+
 export async function POST(request: Request) {
   let formData: FormData;
   try {
@@ -45,7 +82,7 @@ export async function POST(request: Request) {
         uploadFailure({
           code: "INVALID_REQUEST",
           message: "The uploaded files could not be read.",
-          action: "Choose the three PDFs again and retry the check.",
+          action: "Choose the PDFs again and retry the check.",
           retryable: true,
         }),
       ],
@@ -53,78 +90,79 @@ export async function POST(request: Request) {
     );
   }
 
-  const files: Partial<Record<DocKey, File>> = {};
-  const validationFailures: CheckFailure[] = [];
-
-  for (const key of DOC_KEYS) {
-    const value = formData.get(key);
-    if (!(value instanceof File)) {
-      validationFailures.push(
+  const rawFiles = formData
+    .getAll("files")
+    .filter((value): value is File => value instanceof File);
+  if (rawFiles.length === 0) {
+    return failureResponse(
+      [
         uploadFailure({
           code: "MISSING_DOCUMENT",
-          document: key,
-          message: `${DOC_NAMES[key]} is missing.`,
-          action: `Add the ${DOC_NAMES[key]} before running the check.`,
+          message: "No documents were uploaded.",
+          action: "Add at least one PDF before running the check.",
           retryable: true,
         }),
-      );
-      continue;
-    }
+      ],
+      400,
+    );
+  }
+
+  const files: Record<string, File> = {};
+  const failures: CheckFailure[] = [];
+  const seen = new Set<string>();
+  for (const file of rawFiles) {
     const isPdf =
-      value.type === "application/pdf" ||
-      value.name.toLowerCase().endsWith(".pdf");
+      file.type === "application/pdf" ||
+      file.name.toLowerCase().endsWith(".pdf");
     if (!isPdf) {
-      validationFailures.push(
+      failures.push(
         uploadFailure({
           code: "INVALID_FILE_TYPE",
-          document: key,
-          message: `${DOC_NAMES[key]} must be a PDF file.`,
+          message: `"${file.name}" must be a PDF file.`,
           action: "Replace it with a PDF and try again.",
           retryable: false,
         }),
       );
       continue;
     }
-    if (value.size === 0) {
-      validationFailures.push(
+    if (file.size === 0) {
+      failures.push(
         uploadFailure({
           code: "EMPTY_FILE",
-          document: key,
-          message: `${DOC_NAMES[key]} is empty.`,
+          message: `"${file.name}" is empty.`,
           action: "Replace it with a non-empty PDF.",
           retryable: false,
         }),
       );
       continue;
     }
-    if (!(await hasPdfStructure(value))) {
-      validationFailures.push(
+    if (!(await hasPdfStructure(file))) {
+      failures.push(
         uploadFailure({
           code: "UNREADABLE_PDF",
-          document: key,
-          message: `${DOC_NAMES[key]} is not a valid PDF.`,
+          message: `"${file.name}" is not a valid PDF.`,
           action: "Replace it with a valid PDF exported from the source document.",
           retryable: false,
         }),
       );
       continue;
     }
-    files[key] = value;
+    const id = uniqueFileId(file.name, seen);
+    seen.add(id);
+    files[id] = file;
   }
 
-  if (validationFailures.length > 0) {
-    return failureResponse(validationFailures, 400);
+  if (failures.length > 0) {
+    return failureResponse(failures, 400);
   }
 
-  // Backstop for local dev — on Vercel a body this large is rejected with a
-  // 413 before this handler is ever invoked.
-  const totalBytes = DOC_KEYS.reduce((sum, key) => sum + files[key]!.size, 0);
+  const totalBytes = Object.values(files).reduce((sum, file) => sum + file.size, 0);
   if (totalBytes > MAX_UPLOAD_TOTAL_BYTES) {
     return failureResponse(
       [
         uploadFailure({
           code: "UPLOAD_TOO_LARGE",
-          message: "The three PDFs together exceed the 4 MB upload limit.",
+          message: "The PDFs together exceed the 4 MB upload limit.",
           action: "Compress the PDFs or replace them with smaller files.",
           retryable: false,
         }),
@@ -133,58 +171,40 @@ export async function POST(request: Request) {
     );
   }
 
-  let documents;
-  try {
-    documents = await extractAll(files as Record<DocKey, File>);
-  } catch (error) {
-    console.error("TradeLynk extraction failed:", error);
-    if (error instanceof ExtractionBatchError) {
-      const status = error.failures.some(
-        (failure) =>
-          failure.code === "PROVIDER_TIMEOUT" ||
-          failure.code === "PROVIDER_UNAVAILABLE",
-      )
-        ? 503
-        : 422;
-      return failureResponse(error.failures, status);
-    }
-    return failureResponse(
-      [
-        {
-          code: "EXTRACTION_FAILED",
-          stage: "extraction",
-          message: "The documents could not be extracted.",
-          action: "Try again. If the problem continues, replace the PDFs.",
-          retryable: true,
-        },
-      ],
-      500,
-    );
-  }
+  const catalog = loadCatalog();
+  const fileIds = Object.keys(files);
 
+  let comparison: DynamicComparison;
   try {
-    if (
-      process.env.NODE_ENV === "test" &&
-      process.env.CHECK_TEST_FAILURE === "comparison"
-    ) {
-      throw new Error("Simulated comparison failure");
+    if (process.env.EXTRACTION_MODE === "mock") {
+      comparison = await runMockComparison(catalog);
+    } else {
+      const documents: PiDocument[] = fileIds.map((id) => ({ id, file: files[id] }));
+      const result = await runFileConsistency({ documents, catalog });
+      if (result.status === "partial") {
+        return failureResponse(
+          [
+            {
+              code: "NO_FIELDS_EXTRACTED",
+              stage: "extraction",
+              message: `Could not extract every document: ${result.missingMaterial.join(", ")}.`,
+              action: "Retry the check. If it continues, replace the affected PDFs.",
+              retryable: true,
+            },
+          ],
+          422,
+        );
+      }
+      comparison = result.comparison;
     }
-    const fileNames = Object.fromEntries(
-      DOC_KEYS.map((key) => [key, files[key]!.name]),
-    ) as Record<DocKey, string>;
-    return NextResponse.json({
-      outcome: "completed",
-      ...compareDocuments(documents),
-      files: fileNames,
-    });
   } catch (error) {
-    console.error("TradeLynk comparison failed:", error);
+    console.error("TradeLynk agent check failed:", error);
     return failureResponse(
       [
         {
           code: "CHECK_FAILED",
           stage: "comparison",
-          message: "The extracted document details could not be compared.",
+          message: "The document check could not be completed.",
           action: "Try the check again.",
           retryable: true,
         },
@@ -192,4 +212,13 @@ export async function POST(request: Request) {
       500,
     );
   }
+
+  const fileNames = Object.fromEntries(
+    fileIds.map((id) => [id, files[id].name]),
+  );
+  return NextResponse.json({
+    outcome: "completed",
+    comparison,
+    files: fileNames,
+  });
 }

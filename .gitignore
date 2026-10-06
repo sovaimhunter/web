@@ -34,6 +34,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+/.env.local
 
 # vercel
 .vercel
@@ -52,5 +53,17 @@ next-env.d.ts
 *.zip
 *.pdf
 *.md
+!/docs/
+/docs/*
+!/docs/data-architecture.md
 
-/
+# pi agent settings (local-only)
+/.pi/*
+# ...except the project's own document-consistency skill (version-controlled)
+!/.pi/skills/
+/.pi/skills/*
+!/.pi/skills/document-consistency/
+/.pi/skills/document-consistency/*
+!/.pi/skills/document-consistency/SKILL.md
+
+*.sql

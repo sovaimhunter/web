@@ -63,7 +63,7 @@ function isPresent(value: unknown): value is string | number {
   return value !== null && value !== undefined && value !== "";
 }
 
-function normalize(value: unknown): string | null {
+export function normalize(value: unknown): string | null {
   if (!isPresent(value)) return null;
   return String(value).trim().toLowerCase().replace(/\s+/g, " ");
 }
@@ -208,7 +208,7 @@ function descriptionsEquivalent(a: unknown, b: unknown): boolean {
 }
 
 // LCS-based similarity ratio (same spirit as Python's difflib.SequenceMatcher).
-function similarity(a: unknown, b: unknown): number {
+export function similarity(a: unknown, b: unknown): number {
   const x = normalize(a);
   const y = normalize(b);
   if (x === null || y === null) return 0;
@@ -272,7 +272,7 @@ function toDetail(values: Partial<Record<DocKey, string | number>>): Record<stri
   );
 }
 
-function fieldValuesEqual(
+export function fieldValuesEqual(
   field: keyof DocFields,
   a: string | number,
   b: string | number,

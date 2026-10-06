@@ -17,22 +17,33 @@ import { Label } from "@/components/ui/label";
 import { Header } from "@/components/layout/header";
 import { Main } from "@/components/layout/main";
 import { WorkflowSteps } from "@/components/workflow-steps";
-import { createShipment } from "@/lib/shipments";
+import { shipmentApi } from "@/lib/persistence/api-client";
 
 export default function NewShipmentPage() {
   const router = useRouter();
   const [name, setName] = useState("");
   const [reference, setReference] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  const handleSubmit = (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!name.trim()) {
       setError("Please give the shipment a name.");
       return;
     }
-    const shipment = createShipment({ name, reference });
-    router.push(`/shipments/${shipment.id}/documents`);
+    setSaving(true);
+    try {
+      const shipment = await shipmentApi.create({ name, reference });
+      router.push(`/shipments/${shipment.id}/documents`);
+    } catch (submissionError) {
+      setError(
+        submissionError instanceof Error
+          ? submissionError.message
+          : "The shipment could not be created.",
+      );
+      setSaving(false);
+    }
   };
 
   return (
@@ -79,8 +90,8 @@ export default function NewShipmentPage() {
                 />
               </div>
               {error && <p className="text-sm text-red-600">{error}</p>}
-              <Button type="submit" className="w-full">
-                Continue to upload documents
+              <Button type="submit" className="w-full" disabled={saving}>
+                {saving ? "Creating shipment…" : "Continue to upload documents"}
                 <ArrowRight />
               </Button>
             </form>

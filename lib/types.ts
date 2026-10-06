@@ -16,7 +16,7 @@ export type DocFields = {
   port_of_discharge: string | null;
   vessel: string | null;
   unit_quantity: number | null;
-  number_of_packages: string | null;
+  number_of_packages: string | number | null;
   net_weight_kg: number | null;
   gross_weight_kg: number | null;
   total_amount: number | null;

@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "skills": {
+    "electron-best-practices": {
+      "source": "NinjaSln-labs/agent-skills",
+      "sourceType": "github",
+      "skillPath": "electron-best-practices/SKILL.md",
+      "computedHash": "40535c2cc9c4c49b3cb7063d4801b030dd617cd68ef4c0319933fe49e10961b6"
+    },
+    "frontend-design": {
+      "source": "anthropics/claude-code",
+      "ref": "main",
+      "sourceType": "github",
+      "skillPath": "plugins/frontend-design/skills/frontend-design/SKILL.md",
+      "computedHash": "b8c8329ad9b98fa57f4a279e37bdf4a0d55743140e54bb7da3e340d754d75b43"
+    },
+    "fullstack-desktop": {
+      "source": "../../../../Downloads/fullstack-desktop-skills/skills/fullstack-desktop",
+      "sourceType": "local",
+      "computedHash": "a48848a3c3cec027ac80cc0ec1429330dce63e104c7fc08232eb1cf9fe6354eb"
+    },
+    "playwright-expert": {
+      "source": "../../../../Downloads/fullstack-desktop-skills/vendor/skills/playwright-expert",
+      "sourceType": "local",
+      "computedHash": "2715b8412ae840555d77d3d2c566e6f75ca42900637363d7574356af409ae10c"
+    },
+    "sql-pro": {
+      "source": "../../../../Downloads/fullstack-desktop-skills/vendor/skills/sql-pro",
+      "sourceType": "local",
+      "computedHash": "4bbeda009afc2d98d07cdcd5ad318ad7b8921073f74a3118b452b9c01947db0d"
+    },
+    "typescript-pro": {
+      "source": "../../../../Downloads/fullstack-desktop-skills/vendor/skills/typescript-pro",
+      "sourceType": "local",
+      "computedHash": "b53b57340243eab4b75acee9096f0444319bb1b9e8530fdab4d1d75e1568fa6c"
+    },
+    "vercel-react-best-practices": {
+      "source": "../../../../Downloads/fullstack-desktop-skills/vendor/skills/vercel-react-best-practices",
+      "sourceType": "local",
+      "computedHash": "3219a1944e404ffc14d1d9d6aef6dd2e3855b81387ee0a044ccbfe14d34c2357"
+    }
+  }
+}
