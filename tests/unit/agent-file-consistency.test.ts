@@ -157,7 +157,7 @@ describe("dynamic file-consistency agent", () => {
     const byField = (field: string) =>
       verdict.comparison.rows.find((r) => r.field === field);
 
-    expect(byField("exporter")?.status).toBe("review"); // needs_human_review
+    expect(byField("exporter")?.status).toBe("passed"); // identical values
     expect(byField("currency")?.status).toBe("must_fix"); // high risk mismatch
     expect(byField("vessel")?.status).toBe("display"); // only in b
   });

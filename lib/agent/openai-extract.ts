@@ -41,6 +41,14 @@ EVIDENCE AND NORMALIZATION RULES:
   Incoterms, and currencies must be strings.
 - For exporter and consignee normalized_value, use the legal entity name only;
   raw_value and quote must still preserve the source text.
+- "description_of_goods" must describe the shipped commodity or product. Do
+  not use country-of-origin statements, shipping marks, carton/case numbers,
+  addresses, or handling instructions as the goods description. In particular,
+  text such as "MADE IN AUSTRALIA", "COUNTRY OF ORIGIN", or "C/NO. 1" is not a
+  goods description.
+- "country_of_origin" is the country where the goods were made. A visible
+  statement such as "MADE IN AUSTRALIA" supports country_of_origin = Australia,
+  even when it appears inside a shipping-mark block.
 - "line_items" is an array of {"description","quantity","unit_price","amount"} when
   present.
 - "currency" is the printed currency code, e.g. "AUD".
@@ -53,12 +61,13 @@ export function extractionPrompt(requestedFields: string[] = []): string {
   return `${EXTRACTION_PROMPT}
 
 TARGETED SECOND PASS:
-The first pass may have missed these fields: ${requestedFields.join(", ")}.
+The first pass may have missed or misclassified these fields: ${requestedFields.join(", ")}.
 Inspect the entire PDF again, especially table headers, repeated page headers,
-footers, labels, and adjacent columns. Return observations only for the named
-fields when their values are visibly supported by the document. Do not infer,
-guess, or copy a value from another document. If a named field is not visibly
-present, omit it from observations.`;
+footers, labels, adjacent columns, and the semantic meaning of each field.
+Reject text that belongs to a different field category. Return observations
+only for the named fields when their values are visibly supported by the
+document. Do not infer, guess, or copy a value from another document. If a
+named field is not visibly present, omit it from observations.`;
 }
 
 const nullableString = { anyOf: [{ type: "string" }, { type: "null" }] } as const;

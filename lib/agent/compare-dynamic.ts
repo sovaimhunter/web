@@ -50,7 +50,7 @@ export type DynamicRow = {
 export type DynamicIssue = {
   field: string;
   status: "must_fix" | "review";
-  /** True when a human must confirm this field (Skill `needs_human_review`) or the value failed type validation. */
+  /** True when a detected problem requires human confirmation. */
   needsHumanReview: boolean;
   risk?: "high" | "medium" | "low";
   message: string;
@@ -193,9 +193,12 @@ export function compareExtractedDocuments(
         kind === "core" ? catalog?.fields[name as CoreFieldName] : undefined;
       risk = rule?.risk;
       if (outliers.length === 0) {
-        needsHumanReview = rule?.needsHumanReview ?? false;
-        status = needsHumanReview ? "review" : "passed";
+        // Matching normalized values are evidence of cross-document
+        // consistency, not an issue. Risk metadata only affects real
+        // disagreements; it must never turn a match into review work.
+        status = "passed";
       } else {
+        needsHumanReview = rule?.needsHumanReview ?? false;
         const severity = rule ? severityForRisk(rule.risk) : "review";
         status = severity;
         if (severity === "display") outliers = [];
@@ -220,7 +223,7 @@ export function compareExtractedDocuments(
         risk,
         message:
           outliers.length === 0
-            ? `"${name}" is consistent but needs human review`
+            ? `"${name}" needs review`
             : `"${name}" differs across documents`,
         values,
         evidence,

@@ -12,6 +12,13 @@ describe("extractionPrompt", () => {
     expect(prompt).toContain("hs_code, country_of_origin");
     expect(prompt).toContain("Do not infer");
   });
+
+  it("separates goods descriptions from origin statements and shipping marks", () => {
+    const prompt = extractionPrompt(["description_of_goods"]);
+    expect(prompt).toContain('"MADE IN AUSTRALIA"');
+    expect(prompt).toContain('"C/NO. 1"');
+    expect(prompt).toContain("missed or misclassified");
+  });
 });
 
 describe("parseLooseFields", () => {

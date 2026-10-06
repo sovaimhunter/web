@@ -7,8 +7,8 @@ version: 1
 #   high   -> must_fix
 #   medium -> review
 #   low    -> display only (no issue)
-# needs_human_review=true -> the field is surfaced for a human to confirm
-#   even when every document agrees.
+# needs_human_review=true -> when a real mismatch or invalid value is found,
+#   the issue requires human confirmation. Matching values always pass.
 fields:
   exporter:
     needs_human_review: true
@@ -87,6 +87,7 @@ You compare fields across the user's uploaded export documents.
 - Extract fields as they appear; return `null` for anything absent.
 - A field that appears in only one document is displayed, not flagged.
 - Fields that appear in two or more documents are compared using the rules
-  above. `risk` sets the severity; `needs_human_review` means the field must be
-  shown to a human even when consistent.
+  above. Matching normalized values pass and never create an issue. When values
+  differ, `risk` sets the severity and `needs_human_review` marks the resulting
+  issue for human confirmation.
 - Values outside the typed core fields are kept and compared generically.

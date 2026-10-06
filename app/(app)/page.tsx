@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { PackagePlus, Pencil, Search, Trash2 } from "lucide-react";
+import { LoaderCircle, PackagePlus, Pencil, Search, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -71,6 +72,47 @@ function formatDate(iso: string): string {
     month: "short",
     year: "numeric",
   });
+}
+
+function ShipmentsLoading() {
+  return (
+    <div
+      className="brand-surface overflow-hidden rounded-xl border bg-card"
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+      aria-label="Loading shipments"
+    >
+      <div className="flex items-center gap-2 border-b px-4 py-3 text-sm text-muted-foreground">
+        <LoaderCircle className="size-4 animate-spin text-primary" />
+        <span>Loading shipments…</span>
+      </div>
+      <div className="overflow-x-auto">
+        <Table className="min-w-xl">
+          <TableHeader>
+            <TableRow className="bg-muted/50 hover:bg-muted/50">
+              <TableHead>Shipment</TableHead>
+              <TableHead>Reference</TableHead>
+              <TableHead>Created</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="w-20" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {[0, 1, 2].map((row) => (
+              <TableRow key={row}>
+                <TableCell><Skeleton className="h-4 w-44" /></TableCell>
+                <TableCell><Skeleton className="h-4 w-28" /></TableCell>
+                <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                <TableCell><Skeleton className="h-6 w-28 rounded-full" /></TableCell>
+                <TableCell><Skeleton className="ml-auto size-8 rounded-md" /></TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  );
 }
 
 export default function ShipmentsPage() {
@@ -173,11 +215,7 @@ export default function ShipmentsPage() {
         )}
 
         {loading ? (
-          <Card>
-            <CardContent className="py-8 text-sm text-muted-foreground">
-              Loading shipments…
-            </CardContent>
-          </Card>
+          <ShipmentsLoading />
         ) : filtered.length === 0 ? (
           <Card>
             <CardHeader>

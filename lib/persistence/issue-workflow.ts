@@ -2,13 +2,8 @@ import type { IssueRecord } from "./types";
 
 export type IssueQueue = {
   todo: IssueRecord[];
-  confirm: IssueRecord[];
   resolved: IssueRecord[];
 };
-
-export function isConfirmationIssue(issue: IssueRecord): boolean {
-  return issue.needsHumanReview && issue.outlierDocumentIds.length === 0;
-}
 
 export function partitionIssues(
   issues: IssueRecord[],
@@ -20,10 +15,8 @@ export function partitionIssues(
 
   return {
     todo: current.filter(
-      (issue) => issue.status !== "resolved" && !isConfirmationIssue(issue),
-    ),
-    confirm: current.filter(
-      (issue) => issue.status !== "resolved" && isConfirmationIssue(issue),
+      (issue) =>
+        issue.status !== "resolved" && issue.outlierDocumentIds.length > 0,
     ),
     resolved: issues.filter((issue) => issue.status === "resolved"),
   };

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   humanizeField,
-  isConfirmationIssue,
   partitionIssues,
   resolutionLabel,
 } from "../../lib/persistence/issue-workflow";
@@ -35,9 +34,9 @@ function issue(overrides: Partial<IssueRecord> = {}): IssueRecord {
 }
 
 describe("issue workbench presentation", () => {
-  it("separates actionable findings, confirmations, and resolved history", () => {
+  it("separates actionable findings and resolved history", () => {
     const todo = issue({ id: "todo", outlierDocumentIds: ["invoice"] });
-    const confirm = issue({ id: "confirm", needsHumanReview: true });
+    const legacyConsistent = issue({ id: "consistent", needsHumanReview: true });
     const oldOpen = issue({ id: "old", checkRunId: "run-1" });
     const resolved = issue({
       id: "resolved",
@@ -46,20 +45,19 @@ describe("issue workbench presentation", () => {
       resolutionMethod: "recheck_cleared",
     });
 
-    const queues = partitionIssues([todo, confirm, oldOpen, resolved], "run-2");
+    const queues = partitionIssues([todo, legacyConsistent, oldOpen, resolved], "run-2");
 
     expect(queues.todo.map((value) => value.id)).toEqual(["todo"]);
-    expect(queues.confirm.map((value) => value.id)).toEqual(["confirm"]);
     expect(queues.resolved.map((value) => value.id)).toEqual(["resolved"]);
   });
 
-  it("only treats consistent human-review findings as confirmations", () => {
-    expect(isConfirmationIssue(issue({ needsHumanReview: true }))).toBe(true);
-    expect(
-      isConfirmationIssue(
-        issue({ needsHumanReview: true, outlierDocumentIds: ["invoice"] }),
-      ),
-    ).toBe(false);
+  it("never includes a legacy consistent finding in active work", () => {
+    const queues = partitionIssues(
+      [issue({ needsHumanReview: true, outlierDocumentIds: [] })],
+      "run-2",
+    );
+
+    expect(queues.todo).toEqual([]);
   });
 
   it("provides readable field and audit labels", () => {

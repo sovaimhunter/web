@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 import { parseCatalog } from "../../lib/agent/catalog";
 import { partitionExtractedFields, type ExtractedDocument } from "../../lib/agent/fields";
 import {
+  buildFileConsistencyPrompt,
+  createReviewedExtractionTool,
   findTargetedExtractions,
   mergeTargetedExtraction,
   missingDocumentIds,
 } from "../../lib/agent/pi/runtime";
+import type { DocumentSource } from "../../lib/agent/file-consistency";
 
 function document(id: string, values: Record<string, unknown>): ExtractedDocument {
   const { fields, extra, errors } = partitionExtractedFields(values);
@@ -92,5 +95,92 @@ describe("targeted second-pass extraction", () => {
     expect(merged.fields.exporter).toBe("Original Exporter");
     expect(merged.fields.hs_code).toBe("9701.10");
     expect(merged.evidence?.hs_code).toMatchObject({ page: 2 });
+  });
+});
+
+describe("ReAct semantic extraction review", () => {
+  it("instructs the Agent to review semantic fit without treating differences as extraction errors", () => {
+    const prompt = buildFileConsistencyPrompt(["invoice.pdf", "bol.pdf"]);
+    expect(prompt).toContain("Review the returned normalized fields");
+    expect(prompt).toContain('"MADE IN <country>"');
+    expect(prompt).toContain("Do not retry merely because a valid value differs");
+    expect(prompt).toContain("at most one targeted retry");
+  });
+
+  it("replaces only suspicious fields and preserves the rest of the first pass", async () => {
+    let call = 0;
+    const source: DocumentSource = {
+      async get() {
+        call += 1;
+        return call === 1
+          ? {
+              fields: {
+                exporter: "Outback Origins Art Co.",
+                description_of_goods: "Made in Australia",
+              },
+              evidence: {
+                description_of_goods: {
+                  rawValue: "MADE IN AUSTRALIA",
+                  quote: "C/NO. 1 MADE IN AUSTRALIA",
+                  page: 1,
+                },
+              },
+            }
+          : {
+              fields: { description_of_goods: null },
+            };
+      },
+    };
+    const reviewed = createReviewedExtractionTool(source);
+    const signal = new AbortController().signal;
+
+    await reviewed.port.execute(
+      { name: "extract_file", arguments: { file: "bol.pdf" } },
+      signal,
+    );
+    const corrected = (await reviewed.port.execute(
+      {
+        name: "extract_file",
+        arguments: { file: "bol.pdf", fields: ["description_of_goods"] },
+      },
+      signal,
+    )) as ExtractedDocument;
+
+    expect(corrected.fields.exporter).toBe("Outback Origins Art Co.");
+    expect(corrected.fields.description_of_goods).toBeNull();
+    expect(corrected.evidence?.description_of_goods).toBeUndefined();
+    expect(reviewed.attemptsFor("bol.pdf")).toBe(2);
+  });
+
+  it("refuses a third extraction attempt for the same PDF", async () => {
+    const source: DocumentSource = {
+      async get() {
+        return { fields: { hs_code: "9701.21" } };
+      },
+    };
+    const reviewed = createReviewedExtractionTool(source);
+    const signal = new AbortController().signal;
+
+    await reviewed.port.execute(
+      { name: "extract_file", arguments: { file: "invoice.pdf" } },
+      signal,
+    );
+    await reviewed.port.execute(
+      {
+        name: "extract_file",
+        arguments: { file: "invoice.pdf", fields: ["hs_code"] },
+      },
+      signal,
+    );
+
+    await expect(
+      reviewed.port.execute(
+        {
+          name: "extract_file",
+          arguments: { file: "invoice.pdf", fields: ["hs_code"] },
+        },
+        signal,
+      ),
+    ).rejects.toThrow("at most 2 attempts");
   });
 });

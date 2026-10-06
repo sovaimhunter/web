@@ -71,7 +71,7 @@ describe("document-consistency catalog", () => {
     expect(result.issues.some((i) => i.field === "vessel")).toBe(false);
   });
 
-  it("flags needs_human_review fields even when consistent", () => {
+  it("passes needs_human_review fields when their values are consistent", () => {
     const catalog = catalogFromProject;
     const result = compareExtractedDocuments(
       [
@@ -81,13 +81,11 @@ describe("document-consistency catalog", () => {
       catalog,
     );
 
-    expect(row(result, "exporter")?.status).toBe("review");
-    expect(result.issues).toContainEqual(
-      expect.objectContaining({ field: "exporter", status: "review" }),
-    );
+    expect(row(result, "exporter")?.status).toBe("passed");
+    expect(result.issues.some((issue) => issue.field === "exporter")).toBe(false);
   });
 
-  it("carries needsHumanReview and requiresHumanReview through the result", () => {
+  it("does not require human review when a protected field matches", () => {
     const catalog = catalogFromProject;
     const result = compareExtractedDocuments(
       [
@@ -97,10 +95,8 @@ describe("document-consistency catalog", () => {
       catalog,
     );
 
-    expect(result.requiresHumanReview).toBe(true);
-    expect(
-      result.issues.find((i) => i.field === "exporter"),
-    ).toMatchObject({ needsHumanReview: true, risk: "high" });
+    expect(result.requiresHumanReview).toBe(false);
+    expect(result.issues.find((i) => i.field === "exporter")).toBeUndefined();
   });
 
   it("sets requiresHumanReview true for a high-risk mismatch", () => {

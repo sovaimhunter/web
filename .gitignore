@@ -56,6 +56,7 @@ next-env.d.ts
 !/docs/
 /docs/*
 !/docs/data-architecture.md
+!/docs/agent-field-review.md
 
 # project runtime policy required by CI and production
 !/.agents/skills/document-consistency/SKILL.md

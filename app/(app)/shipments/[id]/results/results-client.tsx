@@ -32,6 +32,8 @@ import {
 } from "@/components/ui/dialog";
 import { Header } from "@/components/layout/header";
 import { Main } from "@/components/layout/main";
+import { CheckingOverlay } from "@/components/checking-overlay";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -62,10 +64,15 @@ import { cn } from "@/lib/utils";
 type QueueFilter = keyof IssueQueue;
 
 const FILTERS: Array<{ id: QueueFilter; label: string }> = [
-  { id: "todo", label: "To do" },
-  { id: "confirm", label: "Confirm" },
+  { id: "todo", label: "Active findings" },
   { id: "resolved", label: "Resolved" },
 ];
+
+function defaultQueue(queues: IssueQueue): QueueFilter {
+  return queues.todo.length > 0 || queues.resolved.length === 0
+    ? "todo"
+    : "resolved";
+}
 
 function formatValue(value: unknown): string {
   if (value === null || value === undefined || value === "") return "Not found";
@@ -93,7 +100,7 @@ export function ResultsClient({ shipmentId }: { shipmentId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [updatingIssueId, setUpdatingIssueId] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
-  const [filter, setFilter] = useState<QueueFilter>("todo");
+  const [filter, setFilter] = useState<QueueFilter | null>(null);
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
   const [exceptionIssue, setExceptionIssue] = useState<IssueRecord | null>(null);
   const [exceptionNote, setExceptionNote] = useState("");
@@ -124,7 +131,8 @@ export function ResultsClient({ shipmentId }: { shipmentId: string }) {
     () => partitionIssues(shipment?.issues ?? [], shipment?.latestCheck?.id ?? null),
     [shipment],
   );
-  const visibleIssues = queues[filter];
+  const activeFilter = filter ?? defaultQueue(queues);
+  const visibleIssues = queues[activeFilter];
 
   const changeIssueStatus = async (
     issue: IssueRecord,
@@ -143,6 +151,8 @@ export function ResultsClient({ shipmentId }: { shipmentId: string }) {
       });
       await refresh();
       if (status === "resolved") {
+        setFilter(null);
+        setSelectedIssueId(null);
         setExceptionIssue(null);
         setExceptionNote("");
       }
@@ -160,7 +170,8 @@ export function ResultsClient({ shipmentId }: { shipmentId: string }) {
     try {
       await runShipmentCheck(shipmentId);
       await refresh();
-      setFilter("todo");
+      setFilter(null);
+      setSelectedIssueId(null);
     } catch (value) {
       setError(value instanceof Error ? value.message : "Could not run the check");
     } finally {
@@ -168,7 +179,7 @@ export function ResultsClient({ shipmentId }: { shipmentId: string }) {
     }
   };
 
-  if (loading) return <><Header title="Results" /><Main>Loading results…</Main></>;
+  if (loading) return <ResultsLoading />;
   if (!shipment) return <><Header title="Results" /><Main>Shipment not found.</Main></>;
 
   const latest = shipment.latestCheck;
@@ -226,8 +237,11 @@ export function ResultsClient({ shipmentId }: { shipmentId: string }) {
           <CompletedResult
             result={stored}
             queues={queues}
-            filter={filter}
-            onFilter={setFilter}
+            filter={activeFilter}
+            onFilter={(nextFilter) => {
+              setFilter(nextFilter);
+              setSelectedIssueId(null);
+            }}
             visibleIssues={visibleIssues}
             selectedIssue={selectedIssue}
             onSelectIssue={setSelectedIssueId}
@@ -288,6 +302,77 @@ export function ResultsClient({ shipmentId }: { shipmentId: string }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <CheckingOverlay
+        open={checking}
+        documentCount={shipment.documents.length}
+      />
+    </>
+  );
+}
+
+function ResultsLoading() {
+  return (
+    <>
+      <Header title="Document review" subtitle="Loading shipment…" />
+      <Main className="mx-auto w-full max-w-7xl">
+        <div
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+          aria-label="Loading shipment results"
+        >
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+            <Skeleton className="h-9 w-40" />
+            <div className="flex gap-2">
+              <Skeleton className="h-9 w-32" />
+              <Skeleton className="h-9 w-40" />
+            </div>
+          </div>
+
+          <div className="mb-3 flex items-center gap-2 text-sm text-muted-foreground">
+            <LoaderCircle className="size-4 animate-spin text-primary" />
+            <span>Loading results…</span>
+          </div>
+
+          <section className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {[0, 1, 2, 3].map((item) => (
+              <div key={item} className="rounded-xl border bg-card p-4">
+                <Skeleton className="h-3 w-28" />
+                <Skeleton className="mt-3 h-7 w-16" />
+              </div>
+            ))}
+          </section>
+
+          <div className="mb-3 space-y-2">
+            <Skeleton className="h-5 w-40" />
+            <Skeleton className="h-4 w-80 max-w-full" />
+          </div>
+
+          <section className="grid min-h-[570px] overflow-hidden rounded-xl border bg-card lg:grid-cols-[minmax(280px,0.78fr)_minmax(0,1.6fr)]">
+            <div className="border-b bg-muted/20 p-3 lg:border-r lg:border-b-0">
+              <div className="mb-4 grid grid-cols-2 gap-2">
+                <Skeleton className="h-9" />
+                <Skeleton className="h-9" />
+              </div>
+              <div className="space-y-2">
+                {[0, 1, 2].map((item) => (
+                  <div key={item} className="rounded-lg border bg-background p-3">
+                    <Skeleton className="h-4 w-2/3" />
+                    <Skeleton className="mt-2 h-3 w-full" />
+                    <Skeleton className="mt-3 h-5 w-24 rounded-full" />
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-5 p-5 sm:p-6">
+              <Skeleton className="h-3 w-28" />
+              <Skeleton className="h-7 w-52" />
+              <Skeleton className="h-4 w-80 max-w-full" />
+              <Skeleton className="h-56 w-full rounded-lg" />
+            </div>
+          </section>
+        </div>
+      </Main>
     </>
   );
 }
@@ -344,7 +429,7 @@ function CompletedResult({
     <>
       <section className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Latest check summary">
         <SummaryCard icon={<AlertTriangle className="size-5" />} label="Must fix" value={mustFixCount} tone={mustFixCount > 0 ? "danger" : "neutral"} />
-        <SummaryCard icon={<FileCheck2 className="size-5" />} label="Needs confirmation" value={queues.confirm.length} tone={queues.confirm.length > 0 ? "warning" : "neutral"} />
+        <SummaryCard icon={<FileCheck2 className="size-5" />} label="Needs review" value={queues.todo.filter((issue) => issue.severity === "review").length} tone={queues.todo.some((issue) => issue.severity === "review") ? "warning" : "neutral"} />
         <SummaryCard icon={<CheckCircle2 className="size-5" />} label="Passed comparisons" value={passedCount} tone="success" />
         <SummaryCard icon={<Clock3 className="size-5" />} label={`Latest check #${latestRunNumber}`} value={formatDate(latestCreatedAt)} tone="neutral" compact />
       </section>
@@ -359,7 +444,7 @@ function CompletedResult({
 
       <section className="grid min-h-[570px] overflow-hidden rounded-xl border bg-card lg:grid-cols-[minmax(280px,0.78fr)_minmax(0,1.6fr)]">
         <div className="border-b bg-muted/20 lg:border-r lg:border-b-0">
-          <div className="grid grid-cols-3 border-b p-2">
+          <div className="grid grid-cols-2 border-b p-2">
             {FILTERS.map((item) => (
               <button
                 key={item.id}
@@ -413,11 +498,13 @@ function CompletedResult({
             <div className="flex min-h-[440px] items-center justify-center p-8 text-center">
               <div className="max-w-sm">
                 <CheckCircle2 className="mx-auto mb-3 size-9 text-emerald-600" />
-                <h3 className="font-semibold">Nothing in this queue</h3>
+                <h3 className="font-semibold">
+                  {filter === "resolved" ? "No resolved findings" : "No active findings"}
+                </h3>
                 <p className="mt-1 text-sm text-muted-foreground">
                   {filter === "resolved"
                     ? "Resolved findings will appear here after a re-check or an audited reviewer decision."
-                    : "Choose another queue or run the check again after changing a document."}
+                    : "There are no current findings that need action."}
                 </p>
               </div>
             </div>
@@ -451,8 +538,7 @@ function SummaryCard({ icon, label, value, tone, compact = false }: {
 
 function QueueEmpty({ filter }: { filter: QueueFilter }) {
   const copy = {
-    todo: "No active differences need action.",
-    confirm: "No consistent values are waiting for confirmation.",
+    todo: "No active findings need action.",
     resolved: "No findings have been resolved yet.",
   }[filter];
   return <p className="px-3 py-8 text-center text-sm text-muted-foreground">{copy}</p>;
@@ -537,8 +623,8 @@ function IssueDetail({ issue, documentNames, shipmentId, updating, onReview, onA
             <Badge variant="outline">{Object.keys(issue.valuesByDocument).length} documents</Badge>
           </div>
           <div className="overflow-x-auto rounded-lg border">
-            <Table>
-              <TableHeader><TableRow><TableHead>Document</TableHead><TableHead>Extracted value</TableHead><TableHead>Evidence</TableHead></TableRow></TableHeader>
+            <Table className="table-fixed">
+              <TableHeader><TableRow><TableHead className="w-2/5">Document</TableHead><TableHead className="w-3/5">Extracted value</TableHead></TableRow></TableHeader>
               <TableBody>
                 {Object.entries(issue.valuesByDocument).map(([documentId, value]) => {
                   const evidence = issue.evidenceByDocument[documentId] as { page?: number; quote?: string; confidence?: number } | undefined;
@@ -554,10 +640,26 @@ function IssueDetail({ issue, documentNames, shipmentId, updating, onReview, onA
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell className={cn("min-w-44 align-top", outlier && "font-semibold text-red-700 dark:text-red-300")}>{formatValue(value)}</TableCell>
-                      <TableCell className="min-w-56 align-top text-xs text-muted-foreground">
-                        {evidence?.page ? <p>Page {evidence.page}{typeof evidence.confidence === "number" ? ` · ${Math.round(evidence.confidence * 100)}% confidence` : ""}</p> : null}
-                        {evidence?.quote ? <p className="mt-1 line-clamp-3 italic">“{evidence.quote}”</p> : <p>No source excerpt</p>}
+                      <TableCell className="min-w-64 align-top">
+                        <p className={cn(outlier && "font-semibold text-red-700 dark:text-red-300")}>{formatValue(value)}</p>
+                        {(evidence?.page || (typeof evidence?.confidence === "number" && evidence.confidence < 0.9)) && (
+                          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                            {evidence?.page ? <span>Page {evidence.page}</span> : null}
+                            {typeof evidence?.confidence === "number" && evidence.confidence < 0.9 ? (
+                              <span className="font-medium text-amber-700 dark:text-amber-400">Low extraction confidence</span>
+                            ) : null}
+                          </div>
+                        )}
+                        {evidence?.quote ? (
+                          <details className="mt-2 text-xs text-muted-foreground">
+                            <summary className="w-fit cursor-pointer font-medium text-foreground underline decoration-border underline-offset-4 hover:text-primary">
+                              View source
+                            </summary>
+                            <div className="mt-2 max-h-20 overflow-y-auto overscroll-contain rounded-md bg-muted/40 px-3 py-2">
+                              <p className="break-words border-l-2 border-primary/40 pl-3 italic leading-relaxed">“{evidence.quote}”</p>
+                            </div>
+                          </details>
+                        ) : null}
                       </TableCell>
                     </TableRow>
                   );

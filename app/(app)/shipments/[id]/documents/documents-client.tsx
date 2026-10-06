@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Header } from "@/components/layout/header";
 import { Main } from "@/components/layout/main";
+import { CheckingOverlay } from "@/components/checking-overlay";
 import { WorkflowSteps } from "@/components/workflow-steps";
 import {
   deleteDocument,
@@ -44,6 +45,7 @@ export function DocumentsClient({
   const [shipment, setShipment] = useState<ShipmentDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [checking, setChecking] = useState(false);
   const [replaceTarget, setReplaceTarget] = useState<DocumentRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -133,6 +135,7 @@ export function DocumentsClient({
   const runCheck = async () => {
     if (!shipment || shipment.documents.length === 0) return;
     setBusy(true);
+    setChecking(true);
     setError(null);
     try {
       await runShipmentCheck(shipmentId);
@@ -140,6 +143,7 @@ export function DocumentsClient({
     } catch (value) {
       setError(value instanceof Error ? value.message : "Could not run the check");
       setBusy(false);
+      setChecking(false);
     }
   };
 
@@ -166,9 +170,17 @@ export function DocumentsClient({
         )}
         {error && <Alert variant="destructive" className="mb-5"><AlertCircle /><AlertTitle>Something needs attention</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}
         <Card>
-          <CardHeader className="flex-row items-center justify-between">
+          <CardHeader className="gap-3">
             <div><CardTitle>Shipment files</CardTitle><p className="mt-1 text-sm text-muted-foreground">Upload any export document. Replacements create a new version.</p></div>
-            <Button onClick={() => uploadRef.current?.click()} disabled={busy}><UploadCloud />Upload PDFs</Button>
+            <div className="flex w-full justify-center">
+              <Button
+                className="w-full max-w-md"
+                onClick={() => uploadRef.current?.click()}
+                disabled={busy}
+              >
+                <UploadCloud />Upload PDFs
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             <input ref={uploadRef} type="file" accept="application/pdf,.pdf" multiple className="hidden" onChange={(event) => addFiles([...(event.target.files ?? [])])} />
@@ -211,6 +223,7 @@ export function DocumentsClient({
         </div>
         {documents.length > 0 && <p className="mt-2 text-right text-xs text-muted-foreground">PDFs are sent to OpenAI for field extraction when you run a check.</p>}
       </Main>
+      <CheckingOverlay open={checking} documentCount={documents.length} />
     </>
   );
 }
