@@ -77,6 +77,92 @@ describe("targeted second-pass extraction", () => {
     expect(targets).toEqual([]);
   });
 
+  it("reserves the retry for a role-expected invoice field even when only one peer found it", () => {
+    const invoice = document("invoice.pdf", { exporter: "Acme Pty Ltd" });
+    invoice.documentRole = "commercial_invoice";
+    const packing = document("packing.pdf", { hs_code: "9701.21" });
+    packing.documentRole = "packing_list";
+
+    expect(findTargetedExtractions([invoice, packing], catalog)).toContainEqual({
+      documentId: "invoice.pdf",
+      fields: ["hs_code", "total_amount"],
+    });
+  });
+
+  it("does not waste an invoice retry on packing-only weights and package counts", () => {
+    const invoice = document("invoice.pdf", {
+      exporter: "Acme Pty Ltd",
+      hs_code: "9701.21",
+      total_amount: 100,
+    });
+    invoice.documentRole = "commercial_invoice";
+    const packing = document("packing.pdf", {
+      number_of_packages: 1,
+      net_weight_kg: 12,
+      gross_weight_kg: 18.5,
+    });
+    packing.documentRole = "packing_list";
+    const bol = document("bol.pdf", {
+      number_of_packages: 1,
+      net_weight_kg: 12,
+      gross_weight_kg: 18.5,
+    });
+    bol.documentRole = "bill_of_lading";
+
+    const invoiceTarget = findTargetedExtractions(
+      [invoice, packing, bol],
+      catalog,
+    ).find((target) => target.documentId === "invoice.pdf");
+    expect(invoiceTarget?.fields ?? []).not.toEqual(
+      expect.arrayContaining([
+        "number_of_packages",
+        "net_weight_kg",
+        "gross_weight_kg",
+      ]),
+    );
+  });
+
+  it("rechecks an entity name that was copied from country of origin", () => {
+    const invoice = document("invoice.pdf", {
+      exporter: "Australia",
+      country_of_origin: "Australia",
+      hs_code: "9701.21",
+      total_amount: 100,
+    });
+    invoice.documentRole = "commercial_invoice";
+
+    expect(findTargetedExtractions([invoice], catalog)).toContainEqual({
+      documentId: "invoice.pdf",
+      fields: ["exporter"],
+    });
+  });
+
+  it("rechecks an address mistakenly normalized as an exporter name", () => {
+    const packing = document("packing.pdf", {
+      exporter: "42 Todd Street, Alice Springs NT 0870, Australia",
+    });
+    packing.documentRole = "packing_list";
+
+    const target = findTargetedExtractions([packing], catalog).find(
+      (candidate) => candidate.documentId === "packing.pdf",
+    );
+    expect(target?.fields).toContain("exporter");
+  });
+
+  it("rechecks a Bill of Lading discharge port copied from Place of Delivery", () => {
+    const bol = document("bol.pdf", {
+      exporter: "Acme Pty Ltd",
+      port_of_discharge: "Berlin, Germany",
+      place_of_delivery: "Berlin, Germany",
+    });
+    bol.documentRole = "bill_of_lading";
+
+    expect(findTargetedExtractions([bol], catalog)).toContainEqual({
+      documentId: "bol.pdf",
+      fields: ["port_of_discharge"],
+    });
+  });
+
   it("fills requested blanks without overwriting first-pass values", () => {
     const first = document("invoice.pdf", {
       exporter: "Original Exporter",
@@ -99,12 +185,11 @@ describe("targeted second-pass extraction", () => {
 });
 
 describe("ReAct semantic extraction review", () => {
-  it("instructs the Agent to review semantic fit without treating differences as extraction errors", () => {
+  it("keeps the model on one initial pass so the runtime can allocate the retry", () => {
     const prompt = buildFileConsistencyPrompt(["invoice.pdf", "bol.pdf"]);
-    expect(prompt).toContain("Review the returned normalized fields");
-    expect(prompt).toContain('"MADE IN <country>"');
-    expect(prompt).toContain("Do not retry merely because a valid value differs");
-    expect(prompt).toContain("at most one targeted retry");
+    expect(prompt).toContain("exactly once");
+    expect(prompt).toContain("Do not call the same file again");
+    expect(prompt).toContain("reserves the single targeted retry");
   });
 
   it("replaces only suspicious fields and preserves the rest of the first pass", async () => {

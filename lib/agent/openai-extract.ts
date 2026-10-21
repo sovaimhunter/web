@@ -49,8 +49,15 @@ EVIDENCE AND NORMALIZATION RULES:
 - "country_of_origin" is the country where the goods were made. A visible
   statement such as "MADE IN AUSTRALIA" supports country_of_origin = Australia,
   even when it appears inside a shipping-mark block.
-- "line_items" is an array of {"description","quantity","unit_price","amount"} when
-  present.
+- On commercial invoices, scan every line-item row. Always return line_items,
+  description_of_goods, hs_code, unit_quantity, total_amount, currency, and
+  incoterms when visibly present. Repeated row-level descriptions and HS codes
+  still count as document-level fields; do not wait for a separate summary box.
+- "line_items" is an array of
+  {"description","hs_code","quantity","unit_price","amount"} when present.
+- port_of_discharge may only come from a cell explicitly labelled "Port of
+  Discharge". Never copy "Place of Delivery", "Final Destination", or another
+  nearby location. If the labelled cell is blank, omit port_of_discharge.
 - "currency" is the printed currency code, e.g. "AUD".
 - On a Bill of Lading, derive "unit_quantity" from the Description of Goods only.
   Never use the Net Weight or Gross Weight column as the goods quantity.
@@ -64,6 +71,10 @@ TARGETED SECOND PASS:
 The first pass may have missed or misclassified these fields: ${requestedFields.join(", ")}.
 Inspect the entire PDF again, especially table headers, repeated page headers,
 footers, labels, adjacent columns, and the semantic meaning of each field.
+For invoice description_of_goods and hs_code, read every visible line-item row
+under the Description and HS Code columns. If all rows repeat the same value,
+return that shared value. For port_of_discharge, use only the explicitly labelled
+Port of Discharge cell and omit the field when that cell is blank.
 Reject text that belongs to a different field category. Return observations
 only for the named fields when their values are visibly supported by the
 document. Do not infer, guess, or copy a value from another document. If a
@@ -77,11 +88,12 @@ const lineItemSchema = {
   additionalProperties: false,
   properties: {
     description: nullableString,
+    hs_code: nullableString,
     quantity: nullableNumber,
     unit_price: nullableNumber,
     amount: nullableNumber,
   },
-  required: ["description", "quantity", "unit_price", "amount"],
+  required: ["description", "hs_code", "quantity", "unit_price", "amount"],
 } as const;
 const normalizedValueSchema = {
   anyOf: [
@@ -164,6 +176,127 @@ type ExtractionObservation = {
   confidence: number;
 };
 
+function portOfDischargeEvidenceState(
+  value: unknown,
+  quote: unknown,
+): "supported" | "unsupported" | "unknown" {
+  if (typeof value !== "string" || typeof quote !== "string") return "unknown";
+  const label = /port\s+of\s+discharge/i.exec(quote);
+  if (!label) return "unknown";
+  const afterLabel = quote.slice((label.index ?? 0) + label[0].length);
+  const ownCell = afterLabel.split(
+    /place\s+of\s+delivery|final\s+destination|port\s+of\s+loading/i,
+    1,
+  )[0];
+  const comparable = (text: string) =>
+    text.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  return comparable(ownCell).includes(comparable(value))
+    ? "supported"
+    : "unsupported";
+}
+
+/** A targeted port retry must return label-bound evidence, not a bare city. */
+export function validateTargetedExtraction(
+  extraction: DocumentExtraction,
+  requestedFields: string[],
+): DocumentExtraction {
+  if (!requestedFields.includes("port_of_discharge")) return extraction;
+  const value = extraction.fields.port_of_discharge;
+  const quote = extraction.evidence?.port_of_discharge?.quote;
+  const normalized = (candidate: unknown) =>
+    typeof candidate === "string"
+      ? candidate.trim().toLowerCase().replace(/[^a-z0-9]+/g, "")
+      : null;
+  const discharge = normalized(value);
+  const delivery = normalized(extraction.fields.place_of_delivery);
+  const destination = normalized(extraction.fields.final_destination);
+  const copiedAcrossAdjacentColumns =
+    discharge !== null && discharge === delivery && discharge === destination;
+  if (
+    portOfDischargeEvidenceState(value, quote) !== "supported" ||
+    copiedAcrossAdjacentColumns
+  ) {
+    extraction.fields.port_of_discharge = null;
+  }
+  return extraction;
+}
+
+const WEIGHT_FIELDS = new Set(["net_weight_kg", "gross_weight_kg"]);
+
+function firstFiniteNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value !== "string") return null;
+  const match = value.replace(/,/g, "").match(/-?\d+(?:\.\d+)?/);
+  if (!match) return null;
+  const parsed = Number(match[0]);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+/** Deterministic unit conversion: comparison must not trust model arithmetic. */
+function normalizedWeightKg(observation: ExtractionObservation): number | null {
+  const printed = firstFiniteNumber(observation.raw_value);
+  const fallback = firstFiniteNumber(observation.normalized_value);
+  const value = printed ?? fallback;
+  if (value === null) return null;
+
+  const unitText = `${observation.unit ?? ""} ${String(
+    observation.raw_value ?? "",
+  )}`.toLowerCase();
+  let kilograms: number | null = null;
+  if (/\b(?:metric\s+ton(?:ne)?s?|tonnes?|tons?|t)\b/.test(unitText)) {
+    kilograms = value * 1000;
+  } else if (/\b(?:kilograms?|kgs?|kg)\b/.test(unitText)) {
+    kilograms = value;
+  } else if (/\b(?:grams?|g)\b/.test(unitText)) {
+    kilograms = value / 1000;
+  } else if (/\b(?:pounds?|lbs?|lb)\b/.test(unitText)) {
+    kilograms = value * 0.453592;
+  }
+  if (kilograms !== null) return Math.round(kilograms * 100) / 100;
+
+  // The canonical field itself is kilograms. If no printed unit is available,
+  // retain the model's numeric normalized value rather than guessing a factor.
+  return fallback;
+}
+
+function sharedLineItemText(
+  items: unknown[],
+  key: "description" | "hs_code",
+): string | null {
+  const values = items
+    .map((item) =>
+      typeof item === "object" && item !== null
+        ? (item as Record<string, unknown>)[key]
+        : null,
+    )
+    .filter((value): value is string =>
+      typeof value === "string" && value.trim() !== "",
+    )
+    .map((value) => value.trim());
+  if (values.length === 0) return null;
+
+  const first = values[0];
+  if (values.every((value) => value.toLowerCase() === first.toLowerCase())) {
+    return first;
+  }
+  if (key === "hs_code") return null;
+
+  let prefix = first;
+  for (const value of values.slice(1)) {
+    let index = 0;
+    while (
+      index < prefix.length &&
+      index < value.length &&
+      prefix[index].toLowerCase() === value[index].toLowerCase()
+    ) {
+      index += 1;
+    }
+    prefix = prefix.slice(0, index);
+  }
+  const cleaned = prefix.replace(/[\s·,:;"'\-–—]+$/g, "").trim();
+  return cleaned.split(/\s+/).length >= 2 ? cleaned : null;
+}
+
 /** Parse the strict extraction envelope into the domain source contract. */
 export function parseExtractionResponse(text: string): DocumentExtraction {
   const parsed: unknown = JSON.parse(text);
@@ -190,6 +323,9 @@ export function parseExtractionResponse(text: string): DocumentExtraction {
     }
     const name = observation.field.trim();
     let normalizedValue = observation.normalized_value;
+    if (WEIGHT_FIELDS.has(name)) {
+      normalizedValue = normalizedWeightKg(observation);
+    }
     if (name !== "line_items" && Array.isArray(normalizedValue)) {
       normalizedValue =
         name === "description_of_goods" && typeof observation.raw_value === "string"
@@ -206,6 +342,41 @@ export function parseExtractionResponse(text: string): DocumentExtraction {
         );
       if (!hasPackagingUnit) normalizedValue = null;
     }
+    if (
+      (name === "exporter" || name === "consignee") &&
+      typeof normalizedValue === "string" &&
+      /^\s*\d+[\w\s,.-]*\b(?:street|st\.?|road|rd\.?|avenue|ave\.?|boulevard|blvd\.?|lane|ln\.?|drive|dr\.?)\b/i.test(
+        normalizedValue,
+      )
+    ) {
+      normalizedValue = null;
+    }
+    if (
+      name === "incoterms" &&
+      typeof normalizedValue === "string" &&
+      !/\b(?:EXW|FCA|CPT|CIP|DAP|DPU|DDP|FAS|FOB|CFR|CIF)\b/i.test(
+        normalizedValue,
+      )
+    ) {
+      // Freight payment/status text (for example "Freight Prepaid" or "LCL")
+      // is not an ICC Incoterm.
+      normalizedValue = null;
+    }
+    if (
+      name === "port_of_discharge" &&
+      typeof normalizedValue === "string" &&
+      typeof observation.quote === "string"
+    ) {
+      if (
+        portOfDischargeEvidenceState(normalizedValue, observation.quote) ===
+        "unsupported"
+      ) {
+        // The quote crossed into an adjacent labelled cell. This is the common
+        // B/L layout where Port of Discharge is blank and Place of Delivery has
+        // a city.
+        normalizedValue = null;
+      }
+    }
     fields[name] = normalizedValue;
     evidence[name] = {
       rawValue: observation.raw_value,
@@ -214,6 +385,8 @@ export function parseExtractionResponse(text: string): DocumentExtraction {
       ...(typeof observation.confidence === "number"
         ? { confidence: observation.confidence }
         : {}),
+      // Evidence retains the printed unit for auditability. The core *_kg
+      // value above is the canonical comparison value.
       ...(typeof observation.unit === "string" ? { unit: observation.unit } : {}),
     };
   }
@@ -244,6 +417,27 @@ export function parseExtractionResponse(text: string): DocumentExtraction {
           ? { confidence: lineEvidence.confidence }
           : {}),
       };
+    }
+
+    if (fields.description_of_goods === null || fields.description_of_goods === undefined) {
+      const description = sharedLineItemText(lineItems, "description");
+      if (description) {
+        fields.description_of_goods = description;
+        evidence.description_of_goods = {
+          ...(evidence.line_items ?? {}),
+          rawValue: description,
+        };
+      }
+    }
+    if (fields.hs_code === null || fields.hs_code === undefined) {
+      const hsCode = sharedLineItemText(lineItems, "hs_code");
+      if (hsCode) {
+        fields.hs_code = hsCode;
+        evidence.hs_code = {
+          ...(evidence.line_items ?? {}),
+          rawValue: hsCode,
+        };
+      }
     }
   }
 
@@ -295,6 +489,9 @@ export class OpenAIDocumentSource implements DocumentSource {
       text: { format: EXTRACTION_RESPONSE_FORMAT },
     });
 
-    return parseExtractionResponse(response.output_text);
+    return validateTargetedExtraction(
+      parseExtractionResponse(response.output_text),
+      requestedFields,
+    );
   }
 }

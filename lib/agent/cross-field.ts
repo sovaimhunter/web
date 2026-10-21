@@ -23,9 +23,15 @@ export const CROSS_FIELD_CHECKERS: Record<string, CrossFieldChecker> = {
   invoice_total_matches_lines(doc) {
     const { line_items, total_amount } = doc.fields;
     if (!line_items || total_amount === null) return null;
-    const sum = round2(
-      line_items.reduce((acc, item) => acc + (item.amount ?? 0), 0),
-    );
+    if (
+      line_items.length === 0 ||
+      line_items.some(
+        (item) => typeof item.amount !== "number" || !Number.isFinite(item.amount),
+      )
+    ) {
+      return null;
+    }
+    const sum = round2(line_items.reduce((acc, item) => acc + item.amount!, 0));
     if (sum === round2(total_amount)) return null;
     return { values: { "sum of lines": sum, "stated total": total_amount } };
   },

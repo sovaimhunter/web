@@ -1,5 +1,7 @@
 export type LineItem = {
   description: string | null;
+  /** Repeated row-level HS code, when the invoice table contains one. */
+  hs_code?: string | null;
   quantity: number | null;
   unit_price: number | null;
   amount: number | null;

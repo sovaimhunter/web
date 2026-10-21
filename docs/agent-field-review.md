@@ -12,9 +12,10 @@ evidence or removed without entering an unbounded retry loop.
 ```text
 PDF
   -> extract_file (full first pass)
-  -> Agent reviews field name + normalized value + source evidence
+  -> collect every document before spending any retry
+  -> runtime reviews peer-missing, role-expected and suspicious fields
   -> valid: keep observation
-  -> suspicious: extract_file once for only the suspicious fields
+  -> suspicious/missing: extract_file once for only the planned fields
   -> replace those fields (including with null when absent)
   -> deterministic cross-document comparison
 ```
@@ -25,7 +26,10 @@ documents remains comparison evidence and must not trigger re-extraction.
 ## Core and Runtime boundary
 
 - `ExtractedDocument` remains the normalized Core observation with provenance.
-- The Pi model decides whether a returned value semantically fits its field.
+- The Pi model performs one full extraction per PDF. It cannot spend the retry
+  while other documents are still unseen.
+- The runtime then plans one targeted correction from all observations. It uses
+  peer presence, conservative role-specific recall checks, and semantic guards.
 - `extract_file` is the only allowed action. Its runtime wrapper permits one
   full extraction and at most one targeted correction per PDF.
 - A targeted correction replaces only named fields; all unrelated first-pass
@@ -37,9 +41,11 @@ documents remains comparison evidence and must not trigger re-extraction.
 
 | Product contract | Pi SDK surface |
 |---|---|
-| Review decision | `AgentSession.prompt(...)` and the model transcript |
+| Initial observation | `AgentSession.prompt(...)` and the model transcript |
+| Retry planning | deterministic runtime after all first-pass observations |
 | Extraction action | `defineTool({ name: "extract_file", ... })` |
-| Tool arguments | TypeBox `{ file, fields? }` schema |
+| Agent tool arguments | TypeBox `{ file }` schema |
+| Runtime retry arguments | internal `{ file, fields }` intent |
 | Cancellation | SDK-provided `signal` passed through `adaptTool` to `ToolPort` |
 | Observation | Tool `details` mapped to product `observation_added` events |
 | Audit trace | Existing ordered `AgentEvent` stream persisted with the run |
@@ -49,7 +55,7 @@ attempt budget: a third extraction for the same PDF fails with `budget_tools`.
 
 ## Failure and limitations
 
-- If the semantic review model misses a bad assignment, deterministic
+- If the deterministic review guards miss a bad assignment, cross-document
   comparison may still surface it as a discrepancy for human review.
 - If the single targeted retry cannot find valid source evidence, the field is
   cleared rather than preserving the known-suspicious value.

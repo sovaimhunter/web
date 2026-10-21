@@ -129,6 +129,7 @@ function parseLineItems(
     const item = raw as Record<string, unknown>;
     const description =
       typeof item.description === "string" ? item.description : null;
+    const hsCode = typeof item.hs_code === "string" ? item.hs_code : null;
     const quantity = parseNullableNumber(item.quantity);
     const unitPrice = parseNullableNumber(item.unit_price);
     const amount = parseNullableNumber(item.amount);
@@ -137,6 +138,9 @@ function parseLineItems(
     }
     items.push({
       description,
+      ...(Object.prototype.hasOwnProperty.call(item, "hs_code")
+        ? { hs_code: hsCode }
+        : {}),
       quantity: quantity.value,
       unit_price: unitPrice.value,
       amount: amount.value,
