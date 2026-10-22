@@ -3,6 +3,8 @@ import type { AgentCheckResult, AgentFailedResult } from "@/lib/agent/result";
 import { loadDocumentConsistencyCatalog } from "@/lib/agent/catalog-file";
 import { runFileConsistency, type PiDocument } from "@/lib/agent/pi/runtime";
 import type { AgentEvent } from "@/lib/agent/types";
+import { compareExtractedDocuments } from "@/lib/agent/compare-dynamic";
+import type { ExtractedDocument } from "@/lib/agent/fields";
 import { persistenceContext } from "@/lib/persistence/context";
 import { notFound, persistenceErrorResponse } from "@/lib/persistence/http";
 import type { CheckFailure } from "@/lib/types";
@@ -60,11 +62,41 @@ export async function POST(request: Request, context: Context) {
         });
       }
 
-      const agentResult = await runFileConsistency({
-        documents,
-        catalog: loadDocumentConsistencyCatalog(),
-        onEvent: (event) => observedEvents.push(event),
-      });
+      const catalog = loadDocumentConsistencyCatalog();
+      const agentResult =
+        process.env.EXTRACTION_MODE === "mock"
+          ? await (async () => {
+              const { documents: fixtures } = await import("@/lib/mockData");
+              const extracted: ExtractedDocument[] = shipment.documents.map(
+                (document) => {
+                  const name = document.originalName.toLowerCase();
+                  const key = name.includes("packing")
+                    ? "packing_list"
+                    : name.includes("bill") || name.includes("lading")
+                      ? "bill_of_lading"
+                      : "invoice";
+                  return {
+                    id: document.id,
+                    documentRole: key,
+                    fields: structuredClone(fixtures[key]),
+                    extra: {},
+                    errors: [],
+                    provenance: { source: "mock", at: Date.now() },
+                  };
+                },
+              );
+              return {
+                comparison: compareExtractedDocuments(extracted, catalog),
+                events: [] as AgentEvent[],
+                status: "complete" as const,
+                missingMaterial: [] as string[],
+              };
+            })()
+          : await runFileConsistency({
+              documents,
+              catalog,
+              onEvent: (event) => observedEvents.push(event),
+            });
 
       if (agentResult.status === "partial") {
         const result: AgentFailedResult = {

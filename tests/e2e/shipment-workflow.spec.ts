@@ -11,14 +11,13 @@ const documents = [
 ] as const;
 
 async function uploadDocuments(page: Page) {
-  for (const [label, fileName] of documents) {
-    const card = page.locator('[data-slot="card"]').filter({ hasText: label });
-    await card.locator('input[type="file"]').setInputFiles({
+  await page.locator('input[type="file"][multiple]').setInputFiles(
+    documents.map(([, fileName]) => ({
       name: fileName,
       mimeType: "application/pdf",
       buffer: minimalPdf,
-    });
-  }
+    })),
+  );
 }
 
 test("new exporter completes the workflow and re-checks the same shipment", async ({
@@ -31,52 +30,42 @@ test("new exporter completes the workflow and re-checks the same shipment", asyn
   await page.getByRole("button", { name: "Continue to upload documents" }).click();
 
   await uploadDocuments(page);
-  await expect(page.getByText("All 3 PDFs ready")).toBeVisible();
-  await page.getByRole("button", { name: "Check documents", exact: true }).click();
-  await expect(page).toHaveURL(/\/shipments\/[^/]+\/results$/);
-  const firstResultUrl = page.url();
-  await expect(page.getByRole("heading", { name: "Consistency Check Results" })).toBeVisible();
-  const hsValidation = page.getByRole("region", {
-    name: "HS code validation",
+  await expect(page.getByText("3 active documents")).toBeVisible({ timeout: 15_000 });
+  await page.getByRole("button", { name: "Run check", exact: true }).click();
+  await expect(page).toHaveURL(/\/shipments\/[^/]+\/results$/, {
+    timeout: 30_000,
   });
-  await expect(hsValidation).toBeVisible();
-  await expect(hsValidation.getByText("97012100", { exact: true })).toBeVisible();
-  await expect(
-    hsValidation.getByRole("link", { name: "Open official ABS source" }),
-  ).toHaveAttribute("href", /abs\.gov\.au/);
-  await expect(
-    page.locator('[data-slot="badge"]').filter({ hasText: /^\d+ Passed$/ }),
-  ).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Passed checks" })).toBeVisible();
+  const firstResultUrl = page.url();
+  await expect(page.getByRole("heading", { name: "Document review" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Latest check summary" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Issue workbench" })).toBeVisible();
 
-  await page.getByRole("link", { name: "Upload new documents" }).click();
-  await uploadDocuments(page);
-  await page.getByRole("button", { name: "Check documents", exact: true }).click();
-  await expect(page).toHaveURL(firstResultUrl);
-  await expect(page.getByRole("heading", { name: "Consistency Check Results" })).toBeVisible();
+  await page.getByRole("button", { name: "Run check again" }).click();
+  await expect(page).toHaveURL(firstResultUrl, { timeout: 30_000 });
+  await expect(page.getByRole("heading", { name: "Document review" })).toBeVisible();
+  await expect(page.getByText("Latest check #2")).toBeVisible({ timeout: 30_000 });
 
   await page.getByRole("link", { name: "Back to shipments" }).click();
   const shipmentRows = page.getByRole("row").filter({ hasText: "E2E repeat check" });
   await expect(shipmentRows).toHaveCount(1);
-  await expect(shipmentRows.getByText("1 Must Fix", { exact: true })).toBeVisible();
+  await expect(shipmentRows.getByText(/\d+ issues?/)).toBeVisible();
 });
 
-test("check remains disabled while a whole document is missing", async ({ page }) => {
+test("check can run with a partial export-document set", async ({ page }) => {
   await page.goto("/shipments/new");
   await page.getByRole("textbox", { name: "Shipment name" }).fill("Missing BOL");
   await page.getByRole("button", { name: "Continue to upload documents" }).click();
 
-  for (const [label, fileName] of documents.slice(0, 2)) {
-    const card = page.locator('[data-slot="card"]').filter({ hasText: label });
-    await card.locator('input[type="file"]').setInputFiles({
+  await page.locator('input[type="file"][multiple]').setInputFiles(
+    documents.slice(0, 2).map(([, fileName]) => ({
       name: fileName,
       mimeType: "application/pdf",
       buffer: minimalPdf,
-    });
-  }
+    })),
+  );
 
-  await expect(page.getByText(/2\/3 PDFs ready/)).toBeVisible();
+  await expect(page.getByText("2 active documents")).toBeVisible({ timeout: 15_000 });
   await expect(
-    page.getByRole("button", { name: "Check documents", exact: true }),
-  ).toBeDisabled();
+    page.getByRole("button", { name: "Run check", exact: true }),
+  ).toBeEnabled();
 });

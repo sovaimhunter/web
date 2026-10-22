@@ -3,7 +3,10 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LoaderCircle, Ship } from "lucide-react";
-import { getSupabaseBrowser } from "@/lib/persistence/supabase-browser";
+import {
+  allowsAnonymousE2EAuth,
+  getSupabaseBrowser,
+} from "@/lib/persistence/supabase-browser";
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -12,6 +15,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let active = true;
     const supabase = getSupabaseBrowser();
+    const allowAnonymous = allowsAnonymousE2EAuth();
 
     const redirectToLogin = () => {
       if (!active) return;
@@ -21,7 +25,18 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
 
     supabase.auth.getSession().then(async ({ data }) => {
       if (!active) return;
-      if (!data.session || data.session.user.is_anonymous) {
+      if (!data.session && allowAnonymous) {
+        const { data: anonymousData, error } =
+          await supabase.auth.signInAnonymously();
+        if (!error && anonymousData.session && active) {
+          setReady(true);
+          return;
+        }
+      }
+      if (
+        !data.session ||
+        (data.session.user.is_anonymous && !allowAnonymous)
+      ) {
         if (data.session?.user.is_anonymous) {
           await supabase.auth.signOut({ scope: "local" });
         }
@@ -32,8 +47,11 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     });
 
     const { data } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session && !session.user.is_anonymous) setReady(true);
-      else redirectToLogin();
+      if (session && (!session.user.is_anonymous || allowAnonymous)) setReady(true);
+      // In E2E mode Supabase emits an initial null session before the
+      // signInAnonymously promise resolves. Let the bootstrap flow finish
+      // instead of racing it to /login.
+      else if (!allowAnonymous) redirectToLogin();
     });
 
     return () => {
