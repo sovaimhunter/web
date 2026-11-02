@@ -41,6 +41,63 @@ export type TargetedExtraction = {
   fields: CoreFieldName[];
 };
 
+type RuntimeCredential =
+  | { type: "api_key"; key?: string; env?: Record<string, string> }
+  | {
+      type: "oauth";
+      access: string;
+      refresh: string;
+      expires: number;
+      [key: string]: unknown;
+    };
+
+type CredentialOperationOptions = { signal?: AbortSignal };
+
+/**
+ * Pi's default credential store reads ~/.pi/agent/auth.json before falling
+ * back to provider environment variables. Serverless homes are not writable,
+ * so production runs use this request-local store instead.
+ */
+export function createInMemoryCredentialStore() {
+  const credentials = new Map<string, RuntimeCredential>();
+
+  return {
+    async read(providerId: string, options?: CredentialOperationOptions) {
+      options?.signal?.throwIfAborted();
+      const credential = credentials.get(providerId);
+      return credential ? structuredClone(credential) : undefined;
+    },
+    async list(options?: CredentialOperationOptions) {
+      options?.signal?.throwIfAborted();
+      return [...credentials.entries()].map(([providerId, credential]) => ({
+        providerId,
+        type: credential.type,
+      }));
+    },
+    async modify(
+      providerId: string,
+      update: (
+        current: RuntimeCredential | undefined,
+      ) => Promise<RuntimeCredential | undefined>,
+      options?: CredentialOperationOptions,
+    ) {
+      options?.signal?.throwIfAborted();
+      const current = credentials.get(providerId);
+      const next = await update(
+        current ? structuredClone(current) : undefined,
+      );
+      options?.signal?.throwIfAborted();
+      if (next !== undefined) credentials.set(providerId, structuredClone(next));
+      const stored = credentials.get(providerId);
+      return stored ? structuredClone(stored) : undefined;
+    },
+    async delete(providerId: string, options?: CredentialOperationOptions) {
+      options?.signal?.throwIfAborted();
+      credentials.delete(providerId);
+    },
+  };
+}
+
 export const MAX_EXTRACTION_ATTEMPTS_PER_DOCUMENT = 2;
 
 export function buildFileConsistencyPrompt(fileIds: string[]): string {
@@ -385,11 +442,19 @@ export async function runFileConsistency(
   const modelId = options.modelId ?? "openai/gpt-4.1-mini";
   const [provider, id] = modelId.split("/");
 
-  const [{ createAgentSession, defineTool, ModelRuntime, SessionManager }, { Type }] =
-    await Promise.all([
-      import("@earendil-works/pi-coding-agent"),
-      import("typebox"),
-    ]);
+  const [
+    {
+      createAgentSession,
+      defineTool,
+      ModelRuntime,
+      SessionManager,
+      SettingsManager,
+    },
+    { Type },
+  ] = await Promise.all([
+    import("@earendil-works/pi-coding-agent"),
+    import("typebox"),
+  ]);
 
   const source = new OpenAIDocumentSource(
     Object.fromEntries(options.documents.map((d) => [d.id, d.file])),
@@ -408,7 +473,16 @@ export async function runFileConsistency(
       adapted(toolCallId, params as Record<string, unknown>, signal),
   });
 
-  const modelRuntime = await ModelRuntime.create();
+  const modelRuntime = await ModelRuntime.create({
+    credentials: createInMemoryCredentialStore(),
+    modelsPath: null,
+    refreshOnCreate: false,
+  });
+  if (provider === "openai") {
+    const apiKey = process.env.OPENAI_API_KEY?.trim();
+    if (!apiKey) throw new Error("OPENAI_API_KEY is not configured");
+    await modelRuntime.setRuntimeApiKey(provider, apiKey);
+  }
   const model = modelRuntime.getModel(provider, id);
   if (!model) throw new Error(`Model not found: ${modelId}`);
 
@@ -416,6 +490,7 @@ export async function runFileConsistency(
     model,
     modelRuntime,
     sessionManager: SessionManager.inMemory(),
+    settingsManager: SettingsManager.inMemory(),
     noTools: "builtin",
     customTools: [toolDef],
     tools: ["extract_file"],

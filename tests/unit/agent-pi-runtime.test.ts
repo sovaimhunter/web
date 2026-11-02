@@ -3,6 +3,7 @@ import { parseCatalog } from "../../lib/agent/catalog";
 import { partitionExtractedFields, type ExtractedDocument } from "../../lib/agent/fields";
 import {
   buildFileConsistencyPrompt,
+  createInMemoryCredentialStore,
   createReviewedExtractionTool,
   findTargetedExtractions,
   mergeTargetedExtraction,
@@ -29,6 +30,40 @@ fields:
   total_amount: { needs_human_review: false, risk: high }
   vessel: { needs_human_review: false, risk: low }
 ---`);
+
+describe("serverless Pi credentials", () => {
+  it("stores runtime credentials without touching a home directory", async () => {
+    const store = createInMemoryCredentialStore();
+
+    expect(await store.read("openai")).toBeUndefined();
+    await store.modify("openai", async () => ({
+      type: "api_key",
+      key: "test-key",
+    }));
+
+    expect(await store.read("openai")).toEqual({
+      type: "api_key",
+      key: "test-key",
+    });
+    expect(await store.list()).toEqual([
+      { providerId: "openai", type: "api_key" },
+    ]);
+
+    await store.delete("openai");
+    expect(await store.read("openai")).toBeUndefined();
+  });
+
+  it("creates the Pi model runtime without filesystem-backed auth or models", async () => {
+    const { ModelRuntime } = await import("@earendil-works/pi-coding-agent");
+    const runtime = await ModelRuntime.create({
+      credentials: createInMemoryCredentialStore(),
+      modelsPath: null,
+      refreshOnCreate: false,
+    });
+
+    expect(runtime.getModel("openai", "gpt-4.1-mini")).toBeDefined();
+  });
+});
 
 describe("Pi file-consistency completion guard", () => {
   it("reports every uploaded file that was not extracted", () => {
